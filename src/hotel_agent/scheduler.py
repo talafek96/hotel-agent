@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -123,6 +124,19 @@ def compute_next_run(cfg: ScheduleConfig, now: datetime | None = None) -> dateti
 
     # Unknown mode — default to 12h
     return now + timedelta(hours=12)
+
+
+def _clean_llm_summary(text: str) -> str:
+    """Strip markdown artifacts from LLM output so it renders cleanly in HTML emails."""
+    # Remove **bold** and *italic* markers
+    text = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
+    # Remove # headings
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Remove markdown links [text](url) → text
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    # Collapse multiple newlines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 # ── Scheduler engine ────────────────────────────────────
@@ -421,10 +435,14 @@ class Scheduler:
             prompt = (
                 "Summarize these hotel price alerts in 2-3 sentences. "
                 "Focus on the best deals and most important findings. "
-                "Be concise and actionable.\n\n" + "\n".join(alert_texts)
+                "Be concise and actionable.\n\n"
+                "IMPORTANT: Return ONLY plain text. Do NOT use any markdown formatting "
+                "such as **bold**, *italic*, #headings, or bullet points. "
+                "Write normal sentences only.\n\n" + "\n".join(alert_texts)
             )
 
-            return call_llm(self._app_config, prompt, temperature=0.3, max_tokens=200)
+            summary = call_llm(self._app_config, prompt, temperature=0.3, max_tokens=200)
+            return _clean_llm_summary(summary)
         except Exception:
             log.warning("Scheduler: LLM summary generation failed, sending digest without summary")
             return ""
