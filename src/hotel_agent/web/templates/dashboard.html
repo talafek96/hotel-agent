@@ -23,6 +23,161 @@
     </div>
 </div>
 
+<!-- Pipeline Run Card -->
+<div id="pipeline-card" class="card" style="margin-top:1rem; padding:1rem 1.25rem; border-left:4px solid #2563eb;">
+    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+        <strong>Full Pipeline</strong>
+        <span id="pipeline-status-badge" class="badge" style="display:none;"></span>
+        <span id="pipeline-step" style="color:#64748b; font-size:.8125rem;"></span>
+        <div style="margin-left:auto; display:flex; gap:0.5rem; align-items:center;">
+            <form method="post" action="/pipeline/run" id="pipeline-form" style="margin:0;">
+                <input type="hidden" name="hotel_filter" value="">
+                <button type="submit" id="pipeline-btn" class="btn btn-primary">Run Now</button>
+            </form>
+        </div>
+    </div>
+    <!-- Preflight warnings -->
+    <div id="pipeline-warnings" style="display:none; margin-top:0.5rem; font-size:.8125rem;"></div>
+    <!-- Progress bar -->
+    <div id="pipeline-progress" style="display:none; margin-top:0.5rem;">
+        <div style="background:#e2e8f0; border-radius:4px; height:6px; overflow:hidden;">
+            <div id="pipeline-bar" style="background:#2563eb; height:100%; width:0%; transition:width 0.3s;"></div>
+        </div>
+        <div id="pipeline-progress-text" style="font-size:.75rem; color:#64748b; margin-top:0.25rem;"></div>
+    </div>
+    <!-- Result summary -->
+    <div id="pipeline-result" style="display:none; margin-top:0.5rem; font-size:.8125rem;"></div>
+    <!-- Errors -->
+    <div id="pipeline-errors" style="display:none; margin-top:0.5rem; font-size:.8125rem; color:#991b1b;"></div>
+</div>
+
+<script>
+(function() {
+    const btn = document.getElementById('pipeline-btn');
+    const form = document.getElementById('pipeline-form');
+    const badge = document.getElementById('pipeline-status-badge');
+    const stepEl = document.getElementById('pipeline-step');
+    const progress = document.getElementById('pipeline-progress');
+    const bar = document.getElementById('pipeline-bar');
+    const progressText = document.getElementById('pipeline-progress-text');
+    const resultEl = document.getElementById('pipeline-result');
+    const errorsEl = document.getElementById('pipeline-errors');
+    const warningsEl = document.getElementById('pipeline-warnings');
+
+    const STEP_LABELS = {
+        'starting': 'Starting...',
+        'preflight': 'Checking setup...',
+        'scraping': 'Fetching prices...',
+        'analyzing': 'Analyzing prices...',
+        'notifying': 'Sending notifications...',
+        'done': 'Complete'
+    };
+
+    // Load preflight warnings on page load
+    fetch('/api/pipeline/preflight').then(r => r.json()).then(data => {
+        if (data.warnings && data.warnings.length) {
+            warningsEl.style.display = 'block';
+            warningsEl.innerHTML = data.warnings.map(w =>
+                '<div style="color:#92400e;">&#9888; ' + w + '</div>'
+            ).join('');
+        }
+    });
+
+    let polling = null;
+
+    function pollStatus() {
+        fetch('/api/pipeline/status').then(r => r.json()).then(data => {
+            if (data.running) {
+                btn.disabled = true;
+                btn.textContent = 'Running...';
+                badge.style.display = '';
+                badge.className = 'badge badge-blue';
+                badge.textContent = 'running';
+                stepEl.textContent = STEP_LABELS[data.step] || data.step;
+
+                if (data.step === 'scraping' && data.detail.total > 0) {
+                    progress.style.display = 'block';
+                    const pct = Math.round((data.detail.completed / data.detail.total) * 100);
+                    bar.style.width = pct + '%';
+                    progressText.textContent = data.detail.current_hotel
+                        ? data.detail.completed + '/' + data.detail.total + ' — ' + data.detail.current_hotel
+                        : data.detail.completed + '/' + data.detail.total;
+                } else {
+                    progress.style.display = 'none';
+                }
+                resultEl.style.display = 'none';
+            } else if (data.step === 'done') {
+                clearInterval(polling);
+                polling = null;
+                btn.disabled = false;
+                btn.textContent = 'Run Now';
+                badge.style.display = '';
+                badge.className = 'badge badge-green';
+                badge.textContent = 'done';
+                stepEl.textContent = '';
+                progress.style.display = 'none';
+
+                if (data.result) {
+                    const r = data.result;
+                    resultEl.style.display = 'block';
+                    resultEl.innerHTML =
+                        '<strong>Scrape:</strong> ' + r.scrape_success + '/' + r.scrape_total + ' hotels OK' +
+                        (r.scrape_failed > 0 ? ' &middot; <span style="color:#dc2626;">' + r.scrape_failed + ' failed</span>' : '') +
+                        ' &middot; <strong>Alerts:</strong> ' + r.new_alerts + ' new' +
+                        ' &middot; <strong>Notifications:</strong> ' + r.notifications_sent + ' sent';
+                }
+                if (data.errors && data.errors.length) {
+                    errorsEl.style.display = 'block';
+                    errorsEl.innerHTML = data.errors.map(e => '<div>' + e + '</div>').join('');
+                } else {
+                    errorsEl.style.display = 'none';
+                }
+            } else {
+                btn.disabled = false;
+                btn.textContent = 'Run Now';
+                badge.style.display = 'none';
+                progress.style.display = 'none';
+            }
+        });
+    }
+
+    // Check if pipeline is already running on page load
+    pollStatus();
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        btn.disabled = true;
+        btn.textContent = 'Starting...';
+        resultEl.style.display = 'none';
+        errorsEl.style.display = 'none';
+
+        fetch('/pipeline/run', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'hotel_filter=',
+            redirect: 'manual'
+        }).then(resp => {
+            if (resp.status === 409) {
+                return resp.json().then(d => {
+                    btn.textContent = 'Already running (' + (d.source || '?') + ')';
+                    setTimeout(() => { btn.disabled = false; btn.textContent = 'Run Now'; }, 3000);
+                });
+            }
+            // Started OK — begin polling
+            polling = setInterval(pollStatus, 1500);
+            pollStatus();
+        });
+    });
+
+    // Auto-resume polling if pipeline is running on page load
+    fetch('/api/pipeline/status').then(r => r.json()).then(data => {
+        if (data.running && !polling) {
+            polling = setInterval(pollStatus, 1500);
+        }
+    });
+})();
+</script>
+
 {% if stats.last_run %}
 <div class="card" style="margin-top:1rem; padding:1rem 1.25rem;">
     <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">

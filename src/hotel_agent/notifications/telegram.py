@@ -131,6 +131,8 @@ def notify_alerts(config: AppConfig, alerts: list[Alert]) -> int:
 
     sent = 0
     for alert in alerts:
+        if alert.notified_telegram:
+            continue
         msg = format_alert_message(alert)
         if send_telegram_message(config, msg):
             sent += 1

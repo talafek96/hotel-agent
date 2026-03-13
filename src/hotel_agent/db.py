@@ -610,6 +610,16 @@ class Database:
         self.conn.commit()
         return cur.lastrowid or 0
 
+    def alert_exists(self, booking_id: int, alert_type: str, snapshot_id: int) -> bool:
+        """Check if an equivalent alert already exists for this booking+type+snapshot."""
+        row = self.conn.execute(
+            """SELECT 1 FROM alerts
+               WHERE booking_id=? AND alert_type=? AND snapshot_id=?
+               LIMIT 1""",
+            (booking_id, alert_type, snapshot_id),
+        ).fetchone()
+        return row is not None
+
     def get_pending_alerts(self) -> list[Alert]:
         """Get alerts that haven't been sent yet."""
         rows = self.conn.execute(

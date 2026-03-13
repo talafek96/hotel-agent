@@ -22,3 +22,4 @@ python -m uv run pytest
 - Does NOT want: fancy UI, over-engineered frameworks, AI for AI's sake.
 - Wants to switch between LLM providers easily.
 - Commit messages: concise summary line, bullet-point body. No paragraphs. Never mention Devin or Co-Authored-By.
+- New work goes on feature branches: `usr/<github-username>/<branch_name>` (e.g. `usr/tal-afek/pipeline-scheduler`).

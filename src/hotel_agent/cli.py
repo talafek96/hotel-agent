@@ -598,43 +598,46 @@ def run(
     """Full pipeline: fetch prices, analyze, and notify."""
     _setup_logging(verbose)
 
-    from .analysis.comparator import run_analysis
     from .config import load_config
     from .db import Database
-    from .notifications.telegram import notify_alerts
+    from .pipeline import run_pipeline
 
     config = load_config(config_path)
 
     console.print("[bold]Hotel Price Tracker - Full Run[/bold]\n")
 
-    # Step 1: Scrape
+    def _cli_progress(step: str, detail: dict) -> None:
+        if step == "scraping":
+            done = detail.get("completed", 0)
+            total = detail.get("total", 0)
+            hotel = detail.get("current_hotel", "")
+            if hotel:
+                console.print(f"  [{done}/{total}] {hotel}...", end=" ")
+        elif step == "analyzing":
+            console.print("\n[bold]Step 2/3: Analyzing prices...[/bold]")
+        elif step == "notifying":
+            console.print("\n[bold]Step 3/3: Sending notifications...[/bold]")
+
     console.print("[bold]Step 1/3: Fetching prices...[/bold]")
-    scrape(hotel_name=None, config_path=config_path, verbose=verbose)
+    result = run_pipeline(
+        config,
+        lambda: Database(config.db_path),
+        on_progress=_cli_progress,
+    )
 
-    # Step 2: Analyze
-    console.print("\n[bold]Step 2/3: Analyzing prices...[/bold]")
-    db = Database(config.db_path)
-    alerts = run_analysis(db, config)
-
-    if alerts:
-        console.print(f"  Found [bold]{len(alerts)}[/bold] alerts")
-
-        # Step 3: Notify
-        console.print("\n[bold]Step 3/3: Sending notifications...[/bold]")
-        sent = notify_alerts(config, alerts)
-        if sent:
-            console.print(f"  Sent {sent} Telegram notifications")
-
-            # Mark as notified in DB
-            for a in alerts:
-                if a.id:
-                    db.mark_alert_notified(a.id, "telegram")
-        else:
-            console.print("  [dim]No notifications sent (Telegram not configured)[/dim]")
+    if result.new_alerts:
+        console.print(f"  Found [bold]{result.new_alerts}[/bold] new alerts")
     else:
         console.print("  [dim]No alerts to send.[/dim]")
 
-    db.close()
+    if result.notifications_sent:
+        console.print(f"  Sent {result.notifications_sent} Telegram notifications")
+    elif result.new_alerts:
+        console.print("  [dim]No notifications sent (Telegram not configured)[/dim]")
+
+    if result.errors:
+        console.print(f"  [yellow]{len(result.errors)} error(s)[/yellow]")
+
     console.print("\n[green]Done![/green]")
 
 

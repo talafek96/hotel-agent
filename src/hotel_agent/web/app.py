@@ -556,7 +556,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
     @app.post("/scrape")
     async def scrape_run(hotel_filter: str = Form("")):
-        if scrape_state["running"]:
+        if scrape_state["running"] or pipeline_state["running"]:
             return RedirectResponse("/scrape", status_code=303)
 
         scrape_state.update(
@@ -591,6 +591,91 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "errors": scrape_state["errors"],
             }
         )
+
+    # ── Pipeline (full run: scrape + analyze + notify) ──
+    from ..pipeline import pipeline_lock, preflight_check, run_pipeline
+
+    pipeline_state: dict = {
+        "running": False,
+        "step": "",
+        "detail": {},
+        "result": None,
+        "warnings": [],
+        "errors": [],
+        "source": "",  # "manual" | "scheduler"
+    }
+
+    def _pipeline_progress(step: str, detail: dict) -> None:
+        pipeline_state["step"] = step
+        pipeline_state["detail"] = detail
+
+    def _run_pipeline_background(hotel_filter: str, source: str = "manual") -> None:
+        try:
+            pipeline_state["source"] = source
+            result = run_pipeline(
+                config,
+                get_db,
+                hotel_filter=hotel_filter,
+                on_progress=_pipeline_progress,
+            )
+            pipeline_state["result"] = {
+                "scrape_total": result.scrape_total,
+                "scrape_success": result.scrape_success,
+                "scrape_failed": result.scrape_failed,
+                "new_alerts": result.new_alerts,
+                "notifications_sent": result.notifications_sent,
+                "warnings": result.warnings,
+                "errors": result.errors,
+            }
+            pipeline_state["errors"] = result.errors
+        except Exception as exc:
+            pipeline_state["errors"].append(f"Pipeline crashed: {str(exc)[:200]}")
+            log.exception("Background pipeline crashed")
+        finally:
+            pipeline_state["running"] = False
+            pipeline_state["step"] = "done"
+            pipeline_lock.release()
+
+    @app.get("/api/pipeline/preflight")
+    async def pipeline_preflight():
+        with get_db() as db:
+            warnings = preflight_check(config, db)
+        return JSONResponse({"warnings": warnings})
+
+    @app.post("/pipeline/run")
+    async def pipeline_run(hotel_filter: str = Form("")):
+        if not pipeline_lock.acquire(blocking=False):
+            return JSONResponse(
+                {"error": "Pipeline already running", "source": pipeline_state.get("source", "")},
+                status_code=409,
+            )
+
+        pipeline_state.update({
+            "running": True,
+            "step": "starting",
+            "detail": {},
+            "result": None,
+            "warnings": [],
+            "errors": [],
+            "source": "manual",
+        })
+        thread = threading.Thread(
+            target=_run_pipeline_background, args=(hotel_filter,), daemon=True,
+        )
+        thread.start()
+        return RedirectResponse("/", status_code=303)
+
+    @app.get("/api/pipeline/status")
+    async def pipeline_status():
+        return JSONResponse({
+            "running": pipeline_state["running"],
+            "step": pipeline_state["step"],
+            "detail": pipeline_state["detail"],
+            "result": pipeline_state["result"],
+            "warnings": pipeline_state["warnings"],
+            "errors": pipeline_state["errors"],
+            "source": pipeline_state["source"],
+        })
 
     # ── Check (price comparison) ───────────────────
     @app.get("/check", response_class=HTMLResponse)
