@@ -12,6 +12,7 @@ build/
 
 # Data & secrets
 data/*.db
+data/*.json
 data/screenshots/
 .env
 config.yaml
