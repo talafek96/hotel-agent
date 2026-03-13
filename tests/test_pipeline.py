@@ -7,6 +7,7 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
+from pydantic import SecretStr
 
 from hotel_agent.api.serpapi_client import SerpAPIError, SerpAPIResult
 from hotel_agent.db import Database
@@ -106,17 +107,17 @@ class TestPreflightCheck:
     """Tests for preflight_check()."""
 
     def test_no_serpapi_key_warns(self, tmp_db, config):
-        config.serpapi_key = ""
+        config.serpapi_key = SecretStr("")
         warnings = preflight_check(config, tmp_db)
         assert any("SERPAPI_KEY" in w for w in warnings)
 
     def test_no_active_bookings_warns(self, tmp_db, config):
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         warnings = preflight_check(config, tmp_db)
         assert any("No active bookings" in w for w in warnings)
 
     def test_missing_dates_warns(self, tmp_db, config):
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         h = _insert_hotel(tmp_db)
         # The DB enforces NOT NULL on check_in/out, so we mock to simulate
         # a booking with missing dates (defensive code path).
@@ -134,10 +135,10 @@ class TestPreflightCheck:
         assert any("missing check-in/check-out" in w for w in warnings)
 
     def test_telegram_enabled_missing_token_warns(self, tmp_db, config):
-        config.serpapi_key = "test-key"
-        config.notifications.telegram_enabled = True
-        config.telegram_bot_token = ""
-        config.telegram_chat_id = ""
+        config.serpapi_key = SecretStr("test-key")
+        config.notifications.telegram.enabled = True
+        config.telegram_bot_token = SecretStr("")
+        config.telegram_chat_id = SecretStr("")
         h = _insert_hotel(tmp_db)
         _insert_booking(tmp_db, h)
 
@@ -145,8 +146,8 @@ class TestPreflightCheck:
         assert any("Telegram" in w for w in warnings)
 
     def test_all_clear_returns_empty(self, tmp_db, config):
-        config.serpapi_key = "test-key"
-        config.notifications.telegram_enabled = False
+        config.serpapi_key = SecretStr("test-key")
+        config.notifications.telegram.enabled = False
         h = _insert_hotel(tmp_db)
         _insert_booking(tmp_db, h)
 
@@ -176,7 +177,7 @@ class TestRunPipeline:
         config,
     ):
         """scrape → analyze → notify all execute when config is valid."""
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         h = _insert_hotel(tmp_db, name="Namba Oriental Hotel")
         _insert_booking(tmp_db, h)
 
@@ -220,7 +221,7 @@ class TestRunPipeline:
         config,
     ):
         """Without SERPAPI_KEY scraping is skipped, but analyze + notify still run."""
-        config.serpapi_key = ""
+        config.serpapi_key = SecretStr("")
         h = _insert_hotel(tmp_db)
         _insert_booking(tmp_db, h)
 
@@ -247,7 +248,7 @@ class TestRunPipeline:
         tmp_db,
         config,
     ):
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         h = _insert_hotel(tmp_db)
         _insert_booking(tmp_db, h)
         mock_search.return_value = SerpAPIResult(snapshots=[], used_cached_token=True)
@@ -277,7 +278,7 @@ class TestRunPipeline:
         config,
     ):
         """The 'done' progress call carries final result stats."""
-        config.serpapi_key = ""
+        config.serpapi_key = SecretStr("")
 
         calls: list[tuple[str, dict]] = []
         run_pipeline(
@@ -307,7 +308,7 @@ class TestRunPipeline:
         tmp_db,
         config,
     ):
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         h1 = _insert_hotel(tmp_db, name="Namba Oriental Hotel")
         _insert_booking(tmp_db, h1)
         h2 = _insert_hotel(tmp_db, name="Tokyo Tower Hotel", city="Tokyo")
@@ -338,7 +339,7 @@ class TestRunPipeline:
         tmp_db,
         config,
     ):
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         h = _insert_hotel(tmp_db, name="Namba Oriental Hotel")
         _insert_booking(tmp_db, h)
         mock_search.return_value = SerpAPIResult(snapshots=[], used_cached_token=True)
@@ -366,7 +367,7 @@ class TestRunPipeline:
         tmp_db,
         config,
     ):
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         h = _insert_hotel(tmp_db, name="Namba Oriental Hotel")
         _insert_booking(tmp_db, h)
 
@@ -421,7 +422,7 @@ class TestRunPipeline:
         tmp_db,
         config,
     ):
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         h = _insert_hotel(tmp_db)
         _insert_booking(tmp_db, h)
         mock_search.side_effect = SerpAPIError("rate limit exceeded")
@@ -446,7 +447,7 @@ class TestRunPipeline:
         tmp_db,
         config,
     ):
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         h = _insert_hotel(tmp_db)
         _insert_booking(tmp_db, h)
 
@@ -476,7 +477,7 @@ class TestRunPipeline:
         config,
     ):
         """Bookings without check-in/out dates are skipped (no API call)."""
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         h = _insert_hotel(tmp_db)
         # DB enforces NOT NULL on check_in, so we mock get_active_bookings to
         # simulate a booking with missing dates (defensive code path).
@@ -516,7 +517,7 @@ class TestRunPipeline:
         config,
     ):
         """When the property token is cached, the LLM is not consulted."""
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         h = _insert_hotel(tmp_db)
         _insert_booking(tmp_db, h)
 
@@ -545,7 +546,7 @@ class TestRunPipeline:
         config,
     ):
         """An LLM-approved match persists the property token on the hotel."""
-        config.serpapi_key = "test-key"
+        config.serpapi_key = SecretStr("test-key")
         h = _insert_hotel(tmp_db, name="Namba Oriental Hotel")
         _insert_booking(tmp_db, h)
 

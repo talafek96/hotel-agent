@@ -72,8 +72,8 @@ def compare_booking_to_snapshots(
 
         # 1. Price drop
         if (
-            price_diff >= thresholds.price_drop_min_absolute
-            and pct_diff >= thresholds.price_drop_min_percentage
+            price_diff >= thresholds.price_drop.min_absolute
+            and pct_diff >= thresholds.price_drop.min_percentage
         ):
             price_drop_details.append(_snap_detail(snap, price_diff, pct_diff))
 
@@ -81,8 +81,8 @@ def compare_booking_to_snapshots(
         extra_cost = snap_price_base - booking_price_base
         extra_pct = (extra_cost / booking_price_base * 100) if booking_price_base > 0 else 0
         if (
-            extra_cost <= thresholds.upgrade_max_extra_cost
-            and extra_pct <= thresholds.upgrade_max_extra_percentage
+            extra_cost <= thresholds.upgrade.max_extra_cost
+            and extra_pct <= thresholds.upgrade.max_extra_percentage
             and _is_upgrade(booking, snap)
         ):
             detail = _snap_detail(snap, -extra_cost, -extra_pct)

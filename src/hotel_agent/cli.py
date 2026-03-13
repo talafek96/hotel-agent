@@ -173,10 +173,10 @@ def status(
 
     # Show config summary
     tg_status = (
-        "[green]enabled[/green]" if config.notifications.telegram_enabled else "[dim]disabled[/dim]"
+        "[green]enabled[/green]" if config.notifications.telegram.enabled else "[dim]disabled[/dim]"
     )
     em_status = (
-        "[green]enabled[/green]" if config.notifications.email_enabled else "[dim]disabled[/dim]"
+        "[green]enabled[/green]" if config.notifications.email.enabled else "[dim]disabled[/dim]"
     )
     console.print(f"\n  LLM provider:      [cyan]{config.llm.provider}[/cyan]")
     console.print(f"  Model:             [cyan]{config.llm.model}[/cyan]")
@@ -311,7 +311,7 @@ def scrape(
 
     config = load_config(config_path)
 
-    if not config.serpapi_key:
+    if not config.serpapi_key.get_secret_value():
         console.print(
             "[red]SERPAPI_KEY not configured. Set it in .env or as an environment variable.[/red]"
         )
@@ -367,7 +367,7 @@ def scrape(
 
         try:
             result = search_hotel_prices(
-                api_key=config.serpapi_key,
+                api_key=config.serpapi_key.get_secret_value(),
                 hotel=hotel,
                 check_in=booking.check_in,
                 check_out=booking.check_out,

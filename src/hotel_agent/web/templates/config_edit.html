@@ -4,8 +4,8 @@
 {% block content %}
 <h1>Edit Configuration</h1>
 <p style="font-size:.875rem;color:#64748b;margin-bottom:1.5rem;">
-    Changes are saved to <code>config.yaml</code>. Secrets (API keys, tokens) are loaded from
-    environment variables and cannot be edited here.
+    Changes are saved to <code>config.yaml</code>. API keys and secrets are loaded from
+    <code>.env</code> and shown read-only below.
 </p>
 
 {% if saved %}
@@ -83,20 +83,20 @@
     <h3 style="font-size:.875rem;">Price Drop</h3>
     <div class="form-group">
         <label for="alert_pd_abs">Min Absolute Drop</label>
-        <input type="number" id="alert_pd_abs" name="alert_price_drop_min_absolute" value="{{ config.alerts.price_drop_min_absolute }}" step="0.01">
+        <input type="number" id="alert_pd_abs" name="alert_price_drop_min_absolute" value="{{ config.alerts.price_drop.min_absolute }}" step="0.01">
     </div>
     <div class="form-group">
         <label for="alert_pd_pct">Min Percentage Drop (%)</label>
-        <input type="number" id="alert_pd_pct" name="alert_price_drop_min_percentage" value="{{ config.alerts.price_drop_min_percentage }}" step="0.1">
+        <input type="number" id="alert_pd_pct" name="alert_price_drop_min_percentage" value="{{ config.alerts.price_drop.min_percentage }}" step="0.1">
     </div>
     <h3 style="font-size:.875rem; margin-top:1rem;">Room Upgrade</h3>
     <div class="form-group">
         <label for="alert_up_cost">Max Extra Cost</label>
-        <input type="number" id="alert_up_cost" name="alert_upgrade_max_extra_cost" value="{{ config.alerts.upgrade_max_extra_cost }}" step="0.01">
+        <input type="number" id="alert_up_cost" name="alert_upgrade_max_extra_cost" value="{{ config.alerts.upgrade.max_extra_cost }}" step="0.01">
     </div>
     <div class="form-group">
         <label for="alert_up_pct">Max Extra Percentage (%)</label>
-        <input type="number" id="alert_up_pct" name="alert_upgrade_max_extra_percentage" value="{{ config.alerts.upgrade_max_extra_percentage }}" step="0.1">
+        <input type="number" id="alert_up_pct" name="alert_upgrade_max_extra_percentage" value="{{ config.alerts.upgrade.max_extra_percentage }}" step="0.1">
     </div>
     <h3 style="font-size:.875rem; margin-top:1rem;">Filtering</h3>
     <div class="form-group">
@@ -117,7 +117,7 @@
     <div class="form-group">
         <label>
             <input type="checkbox" name="notif_telegram" value="1"
-                   {% if config.notifications.telegram_enabled %}checked{% endif %}
+                   {% if config.notifications.telegram.enabled %}checked{% endif %}
                    style="width:auto; margin-right:.5rem;">
             Telegram Enabled
         </label>
@@ -125,14 +125,14 @@
     <div class="form-group">
         <label>
             <input type="checkbox" name="notif_email" value="1"
-                   {% if config.notifications.email_enabled %}checked{% endif %}
+                   {% if config.notifications.email.enabled %}checked{% endif %}
                    style="width:auto; margin-right:.5rem;">
             Email Enabled
         </label>
     </div>
     <div class="form-group">
         <label for="notif_digest_time">Email Digest Time</label>
-        <input type="text" id="notif_digest_time" name="notif_digest_time" value="{{ config.notifications.email_digest_time }}" placeholder="08:00">
+        <input type="text" id="notif_digest_time" name="notif_digest_time" value="{{ config.notifications.email.digest_time }}" placeholder="08:00">
     </div>
 </div>
 
@@ -142,6 +142,46 @@
         <label for="db_path">Database Path</label>
         <input type="text" id="db_path" name="db_path" value="{{ config.db_path }}">
     </div>
+</div>
+
+<div class="card">
+    <h2>API Keys &amp; Secrets</h2>
+    <p style="font-size:.8rem; color:#64748b; margin-bottom:1rem;">
+        Saved to <code>.env</code>. Values are hidden by default.
+    </p>
+    {% set secrets = [
+        ("OpenAI API Key", config.openai_api_key.get_secret_value(), "secret_openai_api_key"),
+        ("Gemini API Key", config.gemini_api_key.get_secret_value(), "secret_gemini_api_key"),
+        ("Anthropic API Key", config.anthropic_api_key.get_secret_value(), "secret_anthropic_api_key"),
+        ("SerpAPI Key", config.serpapi_key.get_secret_value(), "secret_serpapi_key"),
+        ("Telegram Bot Token", config.telegram_bot_token.get_secret_value(), "secret_telegram_bot_token"),
+        ("Telegram Chat ID", config.telegram_chat_id.get_secret_value(), "secret_telegram_chat_id"),
+        ("Gmail User", config.gmail_user.get_secret_value(), "secret_gmail_user"),
+        ("Gmail App Password", config.gmail_app_password.get_secret_value(), "secret_gmail_app_password"),
+    ] %}
+    {% for label, value, field_name in secrets %}
+    <div class="form-group" style="margin-bottom:.75rem;">
+        <label for="{{ field_name }}" style="display:flex; align-items:center; justify-content:space-between;">
+            <span>{{ label }}</span>
+            {% if value %}
+            <span class="badge badge-green" style="font-size:.6rem;">SET</span>
+            {% else %}
+            <span class="badge badge-yellow" style="font-size:.6rem;">NOT SET</span>
+            {% endif %}
+        </label>
+        <div style="display:flex; gap:.5rem; align-items:center;">
+            <input type="password" name="{{ field_name }}" id="{{ field_name }}"
+                   value="{{ value }}"
+                   placeholder="Not configured"
+                   style="flex:1; font-family:monospace; font-size:.8rem;">
+            <button type="button" class="btn btn-small"
+                    onclick="toggleSecret(this, '{{ field_name }}')"
+                    style="white-space:nowrap; min-width:60px;">
+                Show
+            </button>
+        </div>
+    </div>
+    {% endfor %}
 </div>
 </div>
 
@@ -153,6 +193,17 @@
 </form>
 
 <script>
+function toggleSecret(btn, inputId) {
+    var input = document.getElementById(inputId);
+    if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = 'Hide';
+    } else {
+        input.type = 'password';
+        btn.textContent = 'Show';
+    }
+}
+
 function onProviderChange() {
     document.getElementById('model_list').innerHTML = '';
     document.getElementById('model_status').textContent =

@@ -31,8 +31,8 @@ def send_telegram_message(
     parse_mode: str = "HTML",
 ) -> bool:
     """Send a message via Telegram Bot API."""
-    token = config.telegram_bot_token
-    chat_id = config.telegram_chat_id
+    token = config.telegram_bot_token.get_secret_value()
+    chat_id = config.telegram_chat_id.get_secret_value()
 
     if not token or not chat_id:
         log.warning("Telegram not configured (missing token or chat_id)")
@@ -126,7 +126,7 @@ def format_alert_message(alert: Alert) -> str:
 
 def notify_alerts(config: AppConfig, alerts: list[Alert]) -> int:
     """Send alert notifications via Telegram. Returns count of sent messages."""
-    if not config.notifications.telegram_enabled:
+    if not config.notifications.telegram.enabled:
         return 0
 
     sent = 0

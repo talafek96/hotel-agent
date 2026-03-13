@@ -14,8 +14,9 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import SecretStr
 
-from ..config import load_config, save_config
+from ..config import load_config, save_config, save_secrets
 from ..db import Database
 from ..models import TravelerComposition
 from ..utils import PLATFORM_URLS, platform_url
@@ -420,7 +421,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 scrape_state["run_id"] = run_id
                 scrape_state["total"] = len(all_bookings)
 
-                if not config.serpapi_key:
+                if not config.serpapi_key.get_secret_value():
                     scrape_state["errors"].append("SERPAPI_KEY not configured")
                 else:
                     for booking in all_bookings:
@@ -447,7 +448,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
                         try:
                             result = search_hotel_prices(
-                                api_key=config.serpapi_key,
+                                api_key=config.serpapi_key.get_secret_value(),
                                 hotel=hotel,
                                 check_in=booking.check_in,
                                 check_out=booking.check_out,
@@ -851,6 +852,14 @@ def create_app(config_path: str | None = None) -> FastAPI:
         notif_email: str = Form(""),
         notif_digest_time: str = Form("08:00"),
         db_path: str = Form("hotel_tracker.db"),
+        secret_openai_api_key: str = Form(""),
+        secret_gemini_api_key: str = Form(""),
+        secret_anthropic_api_key: str = Form(""),
+        secret_serpapi_key: str = Form(""),
+        secret_telegram_bot_token: str = Form(""),
+        secret_telegram_chat_id: str = Form(""),
+        secret_gmail_user: str = Form(""),
+        secret_gmail_app_password: str = Form(""),
     ):
         nonlocal config
 
@@ -876,21 +885,32 @@ def create_app(config_path: str | None = None) -> FastAPI:
             config.currency.rates = rates
 
             # Alerts
-            config.alerts.price_drop_min_absolute = alert_price_drop_min_absolute
-            config.alerts.price_drop_min_percentage = alert_price_drop_min_percentage
-            config.alerts.upgrade_max_extra_cost = alert_upgrade_max_extra_cost
-            config.alerts.upgrade_max_extra_percentage = alert_upgrade_max_extra_percentage
+            config.alerts.price_drop.min_absolute = alert_price_drop_min_absolute
+            config.alerts.price_drop.min_percentage = alert_price_drop_min_percentage
+            config.alerts.upgrade.max_extra_cost = alert_upgrade_max_extra_cost
+            config.alerts.upgrade.max_extra_percentage = alert_upgrade_max_extra_percentage
             config.alerts.only_cancellable = alert_only_cancellable == "1"
 
             # Notifications
-            config.notifications.telegram_enabled = notif_telegram == "1"
-            config.notifications.email_enabled = notif_email == "1"
-            config.notifications.email_digest_time = notif_digest_time
+            config.notifications.telegram.enabled = notif_telegram == "1"
+            config.notifications.email.enabled = notif_email == "1"
+            config.notifications.email.digest_time = notif_digest_time
 
             # Database
             config.db_path = db_path
 
+            # Secrets
+            config.openai_api_key = SecretStr(secret_openai_api_key)
+            config.gemini_api_key = SecretStr(secret_gemini_api_key)
+            config.anthropic_api_key = SecretStr(secret_anthropic_api_key)
+            config.serpapi_key = SecretStr(secret_serpapi_key)
+            config.telegram_bot_token = SecretStr(secret_telegram_bot_token)
+            config.telegram_chat_id = SecretStr(secret_telegram_chat_id)
+            config.gmail_user = SecretStr(secret_gmail_user)
+            config.gmail_app_password = SecretStr(secret_gmail_app_password)
+
             save_config(config, config_path)
+            save_secrets(config)
         except Exception as e:
             log.exception("Failed to save config")
             error = str(e)
@@ -958,7 +978,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
         try:
             if provider == "openai":
-                key = config.openai_api_key
+                key = config.openai_api_key.get_secret_value()
                 if not key:
                     return JSONResponse({"error": "No OpenAI API key configured"}, 400)
                 resp = req.get(
@@ -976,7 +996,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 )
 
             elif provider == "gemini":
-                key = config.gemini_api_key
+                key = config.gemini_api_key.get_secret_value()
                 if not key:
                     return JSONResponse({"error": "No Gemini API key configured"}, 400)
                 resp = req.get(
@@ -992,7 +1012,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 )
 
             elif provider == "anthropic":
-                key = config.anthropic_api_key
+                key = config.anthropic_api_key.get_secret_value()
                 if not key:
                     return JSONResponse({"error": "No Anthropic API key configured"}, 400)
                 resp = req.get(

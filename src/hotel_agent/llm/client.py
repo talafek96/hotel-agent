@@ -35,12 +35,12 @@ def _set_api_key(config: AppConfig):
     import os
 
     provider = config.llm.provider
-    if provider == "openai" and config.openai_api_key:
-        os.environ["OPENAI_API_KEY"] = config.openai_api_key
-    elif provider == "gemini" and config.gemini_api_key:
-        os.environ["GEMINI_API_KEY"] = config.gemini_api_key
-    elif provider == "anthropic" and config.anthropic_api_key:
-        os.environ["ANTHROPIC_API_KEY"] = config.anthropic_api_key
+    if provider == "openai" and config.openai_api_key.get_secret_value():
+        os.environ["OPENAI_API_KEY"] = config.openai_api_key.get_secret_value()
+    elif provider == "gemini" and config.gemini_api_key.get_secret_value():
+        os.environ["GEMINI_API_KEY"] = config.gemini_api_key.get_secret_value()
+    elif provider == "anthropic" and config.anthropic_api_key.get_secret_value():
+        os.environ["ANTHROPIC_API_KEY"] = config.anthropic_api_key.get_secret_value()
 
 
 def call_llm(
