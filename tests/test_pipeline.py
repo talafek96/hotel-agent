@@ -1,40 +1,82 @@
-"""Tests for the pipeline module."""
+"""Tests for the pipeline module (scrape → analyze → notify)."""
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import date
 from unittest.mock import patch
 
-from hotel_agent.config import AppConfig, NotificationConfig
+import pytest
+
+from hotel_agent.api.serpapi_client import SerpAPIError, SerpAPIResult
 from hotel_agent.db import Database
-from hotel_agent.models import (
-    Alert,
-    Booking,
-    Hotel,
-    PriceSnapshot,
-    TravelerComposition,
+from hotel_agent.models import Alert, Booking, Hotel, PriceSnapshot
+from hotel_agent.pipeline import (
+    PipelineResult,
+    pipeline_lock,
+    preflight_check,
+    run_pipeline,
 )
-from hotel_agent.pipeline import PipelineResult, preflight_check, run_pipeline
 
 
-def _get_db(db_path: str):
-    """Factory that returns a Database context manager."""
-    return Database(db_path)
+# ── Helpers ─────────────────────────────────────────────
 
 
-def _make_config(tmp_path, **overrides) -> AppConfig:
-    db_path = str(tmp_path / "test.db")
-    cfg = AppConfig(
-        db_path=db_path,
-        travelers=TravelerComposition(adults=2, children_ages=[4]),
+def _make_get_db(db_path: str):
+    """Context-manager factory matching the ``get_db`` signature expected by
+    :func:`run_pipeline`."""
+
+    @contextmanager
+    def _get_db():
+        db = Database(db_path)
+        try:
+            yield db
+        finally:
+            db.close()
+
+    return _get_db
+
+
+def _insert_hotel(db: Database, name: str = "Test Hotel", city: str = "Osaka") -> int:
+    """Insert a hotel and return its id."""
+    return db.upsert_hotel(
+        Hotel(name=name, city=city, country="Japan", platform="Booking.com")
     )
-    for k, v in overrides.items():
-        setattr(cfg, k, v)
-    return cfg
+
+
+def _insert_booking(db: Database, hotel_id: int, **overrides) -> int:
+    """Insert an active booking and return its id."""
+    defaults = dict(
+        hotel_id=hotel_id,
+        check_in=date(2026, 8, 31),
+        check_out=date(2026, 9, 3),
+        room_type="Standard Double",
+        booked_price=135833,
+        currency="JPY",
+        is_cancellable=True,
+        breakfast_included=False,
+        platform="Agoda",
+        status="active",
+    )
+    defaults.update(overrides)
+    return db.add_booking(Booking(**defaults))
+
+
+@pytest.fixture(autouse=True)
+def _release_pipeline_lock():
+    """Ensure the global pipeline lock is released after every test."""
+    yield
+    if pipeline_lock.locked():
+        pipeline_lock.release()
+
+
+# ── PipelineResult ──────────────────────────────────────
 
 
 class TestPipelineResult:
-    def test_defaults_are_zero(self):
+    """PipelineResult dataclass should have sensible zero/empty defaults."""
+
+    def test_defaults_are_zero_and_empty(self):
         r = PipelineResult()
         assert r.scrape_total == 0
         assert r.scrape_success == 0
@@ -44,268 +86,474 @@ class TestPipelineResult:
         assert r.warnings == []
         assert r.errors == []
 
+    def test_list_fields_are_independent_instances(self):
+        """Each PipelineResult gets its own list objects (mutable default safety)."""
+        a = PipelineResult()
+        b = PipelineResult()
+        a.warnings.append("oops")
+        assert b.warnings == []
+
+
+# ── preflight_check ─────────────────────────────────────
+
 
 class TestPreflightCheck:
-    def test_no_serpapi_key(self, tmp_path):
-        cfg = _make_config(tmp_path, serpapi_key="")
-        db = Database(cfg.db_path)
-        warnings = preflight_check(cfg, db)
-        db.close()
+    """Tests for preflight_check()."""
+
+    def test_no_serpapi_key_warns(self, tmp_db, config):
+        config.serpapi_key = ""
+        warnings = preflight_check(config, tmp_db)
         assert any("SERPAPI_KEY" in w for w in warnings)
 
-    def test_no_active_bookings(self, tmp_path):
-        cfg = _make_config(tmp_path, serpapi_key="test-key")
-        db = Database(cfg.db_path)
-        warnings = preflight_check(cfg, db)
-        db.close()
+    def test_no_active_bookings_warns(self, tmp_db, config):
+        config.serpapi_key = "test-key"
+        warnings = preflight_check(config, tmp_db)
         assert any("No active bookings" in w for w in warnings)
 
-    def test_missing_dates_warning(self, tmp_path):
-        cfg = _make_config(tmp_path, serpapi_key="test-key")
-        db = Database(cfg.db_path)
-        hotel_id = db.upsert_hotel(Hotel(name="Test", city="Tokyo"))
-        db.upsert_booking(
-            Booking(
-                hotel_id=hotel_id,
-                check_in=date(2026, 8, 1),
-                check_out=date(2026, 8, 5),
-                booked_price=100,
-            )
-        )
-        # Mock get_active_bookings to return one with missing dates
-        booking_no_dates = Booking(hotel_id=hotel_id, booked_price=100)
-        with patch.object(db, "get_active_bookings", return_value=[booking_no_dates]):
-            warnings = preflight_check(cfg, db)
-        db.close()
-        assert any("missing check-in" in w for w in warnings)
+    def test_missing_dates_warns(self, tmp_db, config):
+        config.serpapi_key = "test-key"
+        h = _insert_hotel(tmp_db)
+        _insert_booking(tmp_db, h, check_in=None, check_out=None)
 
-    def test_telegram_missing_token_warning(self, tmp_path):
-        cfg = _make_config(
-            tmp_path,
-            serpapi_key="test-key",
-            notifications=NotificationConfig(telegram_enabled=True),
-            telegram_bot_token="",
-            telegram_chat_id="",
-        )
-        db = Database(cfg.db_path)
-        hotel_id = db.upsert_hotel(Hotel(name="Test", city="Tokyo"))
-        db.upsert_booking(
-            Booking(
-                hotel_id=hotel_id,
-                check_in=date(2026, 8, 1),
-                check_out=date(2026, 8, 5),
-                booked_price=100,
-            )
-        )
-        warnings = preflight_check(cfg, db)
-        db.close()
+        warnings = preflight_check(config, tmp_db)
+        assert any("missing check-in/check-out" in w for w in warnings)
+
+    def test_telegram_enabled_missing_token_warns(self, tmp_db, config):
+        config.serpapi_key = "test-key"
+        config.notifications.telegram_enabled = True
+        config.telegram_bot_token = ""
+        config.telegram_chat_id = ""
+        h = _insert_hotel(tmp_db)
+        _insert_booking(tmp_db, h)
+
+        warnings = preflight_check(config, tmp_db)
         assert any("Telegram" in w for w in warnings)
 
-    def test_all_clear(self, tmp_path):
-        cfg = _make_config(tmp_path, serpapi_key="test-key")
-        db = Database(cfg.db_path)
-        hotel_id = db.upsert_hotel(Hotel(name="Test", city="Tokyo"))
-        db.upsert_booking(
-            Booking(
-                hotel_id=hotel_id,
-                check_in=date(2026, 8, 1),
-                check_out=date(2026, 8, 5),
-                booked_price=100,
-            )
-        )
-        warnings = preflight_check(cfg, db)
-        db.close()
+    def test_all_clear_returns_empty(self, tmp_db, config):
+        config.serpapi_key = "test-key"
+        config.notifications.telegram_enabled = False
+        h = _insert_hotel(tmp_db)
+        _insert_booking(tmp_db, h)
+
+        warnings = preflight_check(config, tmp_db)
         assert warnings == []
 
 
+# ── run_pipeline ────────────────────────────────────────
+
+
 class TestRunPipeline:
-    def _seed_db(self, db_path: str) -> int:
-        """Seed a hotel + booking, return booking_id."""
-        db = Database(db_path)
-        hotel_id = db.upsert_hotel(Hotel(name="Test Hotel", city="Tokyo"))
-        booking_id = db.upsert_booking(
-            Booking(
-                hotel_id=hotel_id,
-                check_in=date(2026, 8, 1),
-                check_out=date(2026, 8, 5),
-                room_type="Standard",
-                booked_price=100000,
-                currency="JPY",
-                platform="booking.com",
-            )
-        )
-        db.close()
-        return booking_id
+    """Tests for run_pipeline() orchestration."""
 
-    def test_no_serpapi_key_skips_scraping(self, tmp_path):
-        cfg = _make_config(tmp_path, serpapi_key="")
-        self._seed_db(cfg.db_path)
+    # -- happy path --------------------------------------------------
 
-        with (
-            patch("hotel_agent.analysis.comparator.run_analysis", return_value=[]),
-            patch("hotel_agent.notifications.telegram.notify_alerts", return_value=0),
-        ):
-            result = run_pipeline(cfg, lambda: Database(cfg.db_path))
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=0)
+    @patch("hotel_agent.pipeline.run_analysis", return_value=[])
+    @patch("hotel_agent.pipeline.verify_hotel_match", return_value=True)
+    @patch("hotel_agent.pipeline.search_hotel_prices")
+    def test_full_pipeline_runs_all_steps(
+        self, mock_search, mock_verify, mock_analysis, mock_notify, tmp_db, config,
+    ):
+        """scrape → analyze → notify all execute when config is valid."""
+        config.serpapi_key = "test-key"
+        h = _insert_hotel(tmp_db, name="Namba Oriental Hotel")
+        _insert_booking(tmp_db, h)
 
-        assert result.scrape_total == 0
-        assert "scraping skipped" in result.errors[0].lower()
-
-    @patch("hotel_agent.notifications.telegram.notify_alerts", return_value=0)
-    @patch("hotel_agent.analysis.comparator.run_analysis", return_value=[])
-    @patch("hotel_agent.api.serpapi_client.search_hotel_prices")
-    def test_happy_path_scrape(self, mock_search, mock_analysis, mock_notify, tmp_path):
-        from hotel_agent.api.serpapi_client import SerpAPIResult
-
-        cfg = _make_config(tmp_path, serpapi_key="test-key")
-        self._seed_db(cfg.db_path)
-
-        snap = PriceSnapshot(
-            hotel_id=1,
-            check_in=date(2026, 8, 1),
-            check_out=date(2026, 8, 5),
-            room_type="Standard",
-            platform="booking.com",
-            price=90000,
-            currency="JPY",
-        )
         mock_search.return_value = SerpAPIResult(
-            snapshots=[snap],
-            matched_name="Test Hotel",
-            matched_address="Tokyo",
+            snapshots=[
+                PriceSnapshot(
+                    hotel_id=h,
+                    check_in=date(2026, 8, 31),
+                    check_out=date(2026, 9, 3),
+                    room_type="Standard Double",
+                    platform="Booking.com",
+                    price=120000,
+                    currency="JPY",
+                ),
+            ],
+            matched_name="Namba Oriental Hotel",
+            matched_address="Osaka",
             property_token="tok123",
-            used_cached_token=True,
+            used_cached_token=False,
         )
 
-        result = run_pipeline(cfg, lambda: Database(cfg.db_path))
+        result = run_pipeline(config, _make_get_db(config.db_path))
 
         assert result.scrape_total == 1
         assert result.scrape_success == 1
         assert result.scrape_failed == 0
         mock_search.assert_called_once()
+        mock_verify.assert_called_once()
         mock_analysis.assert_called_once()
+        mock_notify.assert_called_once()
 
-    @patch("hotel_agent.notifications.telegram.notify_alerts", return_value=0)
-    @patch("hotel_agent.analysis.comparator.run_analysis", return_value=[])
-    @patch("hotel_agent.api.serpapi_client.search_hotel_prices")
-    def test_serpapi_error_is_caught(self, mock_search, mock_analysis, mock_notify, tmp_path):
-        from hotel_agent.api.serpapi_client import SerpAPIError
+    # -- no serpapi key ----------------------------------------------
 
-        cfg = _make_config(tmp_path, serpapi_key="test-key")
-        self._seed_db(cfg.db_path)
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=0)
+    @patch("hotel_agent.pipeline.run_analysis", return_value=[])
+    def test_no_serpapi_key_skips_scraping(
+        self, mock_analysis, mock_notify, tmp_db, config,
+    ):
+        """Without SERPAPI_KEY scraping is skipped, but analyze + notify still run."""
+        config.serpapi_key = ""
+        h = _insert_hotel(tmp_db)
+        _insert_booking(tmp_db, h)
 
-        mock_search.side_effect = SerpAPIError("API limit reached")
+        result = run_pipeline(config, _make_get_db(config.db_path))
 
-        result = run_pipeline(cfg, lambda: Database(cfg.db_path))
+        assert result.scrape_total == 0
+        assert result.scrape_success == 0
+        assert any("SERPAPI_KEY" in e for e in result.errors)
+        mock_analysis.assert_called_once()
+        mock_notify.assert_called_once()
 
-        assert result.scrape_total == 1
-        assert result.scrape_failed == 1
-        assert any("API limit" in e for e in result.errors)
+    # -- on_progress callback ----------------------------------------
 
-    @patch("hotel_agent.notifications.telegram.notify_alerts", return_value=0)
-    @patch("hotel_agent.analysis.comparator.run_analysis", return_value=[])
-    @patch("hotel_agent.api.serpapi_client.search_hotel_prices")
-    def test_hotel_filter(self, mock_search, mock_analysis, mock_notify, tmp_path):
-        from hotel_agent.api.serpapi_client import SerpAPIResult
-
-        cfg = _make_config(tmp_path, serpapi_key="test-key")
-
-        db = Database(cfg.db_path)
-        h1 = db.upsert_hotel(Hotel(name="Grand Hyatt", city="Tokyo"))
-        h2 = db.upsert_hotel(Hotel(name="Hilton Osaka", city="Osaka"))
-        db.upsert_booking(
-            Booking(
-                hotel_id=h1,
-                check_in=date(2026, 8, 1),
-                check_out=date(2026, 8, 5),
-                booked_price=100000,
-                currency="JPY",
-            )
-        )
-        db.upsert_booking(
-            Booking(
-                hotel_id=h2,
-                check_in=date(2026, 8, 1),
-                check_out=date(2026, 8, 5),
-                booked_price=80000,
-                currency="JPY",
-            )
-        )
-        db.close()
-
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=0)
+    @patch("hotel_agent.pipeline.run_analysis", return_value=[])
+    @patch("hotel_agent.pipeline.verify_hotel_match", return_value=True)
+    @patch("hotel_agent.pipeline.search_hotel_prices")
+    def test_on_progress_invoked_for_each_step(
+        self, mock_search, mock_verify, mock_analysis, mock_notify, tmp_db, config,
+    ):
+        config.serpapi_key = "test-key"
+        h = _insert_hotel(tmp_db)
+        _insert_booking(tmp_db, h)
         mock_search.return_value = SerpAPIResult(snapshots=[], used_cached_token=True)
+
+        calls: list[tuple[str, dict]] = []
 
         result = run_pipeline(
-            cfg,
-            lambda: Database(cfg.db_path),
-            hotel_filter="hyatt",
+            config,
+            _make_get_db(config.db_path),
+            on_progress=lambda step, detail: calls.append((step, detail)),
         )
 
-        assert result.scrape_total == 1
-        mock_search.assert_called_once()
-
-    @patch("hotel_agent.notifications.telegram.notify_alerts", return_value=0)
-    @patch("hotel_agent.analysis.comparator.run_analysis", return_value=[])
-    @patch("hotel_agent.api.serpapi_client.search_hotel_prices")
-    def test_progress_callback_called(self, mock_search, mock_analysis, mock_notify, tmp_path):
-        from hotel_agent.api.serpapi_client import SerpAPIResult
-
-        cfg = _make_config(tmp_path, serpapi_key="test-key")
-        self._seed_db(cfg.db_path)
-        mock_search.return_value = SerpAPIResult(snapshots=[], used_cached_token=True)
-
-        progress_calls: list[tuple] = []
-
-        def on_progress(step: str, detail: dict) -> None:
-            progress_calls.append((step, detail))
-
-        run_pipeline(cfg, lambda: Database(cfg.db_path), on_progress=on_progress)
-
-        steps = [c[0] for c in progress_calls]
+        steps = [c[0] for c in calls]
         assert "preflight" in steps
         assert "scraping" in steps
         assert "analyzing" in steps
         assert "notifying" in steps
         assert "done" in steps
 
-    @patch("hotel_agent.notifications.telegram.notify_alerts", return_value=2)
-    @patch("hotel_agent.analysis.comparator.run_analysis")
-    @patch("hotel_agent.api.serpapi_client.search_hotel_prices")
-    def test_notifications_counted(self, mock_search, mock_analysis, mock_notify, tmp_path):
-        from hotel_agent.api.serpapi_client import SerpAPIResult
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=0)
+    @patch("hotel_agent.pipeline.run_analysis", return_value=[])
+    def test_on_progress_done_includes_stats(
+        self, mock_analysis, mock_notify, tmp_db, config,
+    ):
+        """The 'done' progress call carries final result stats."""
+        config.serpapi_key = ""
 
-        cfg = _make_config(tmp_path, serpapi_key="test-key")
-        self._seed_db(cfg.db_path)
+        calls: list[tuple[str, dict]] = []
+        run_pipeline(
+            config,
+            _make_get_db(config.db_path),
+            on_progress=lambda step, detail: calls.append((step, detail)),
+        )
+
+        done_calls = [c for c in calls if c[0] == "done"]
+        assert len(done_calls) == 1
+        detail = done_calls[0][1]
+        assert "scrape_total" in detail
+        assert "new_alerts" in detail
+
+    # -- hotel filter ------------------------------------------------
+
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=0)
+    @patch("hotel_agent.pipeline.run_analysis", return_value=[])
+    @patch("hotel_agent.pipeline.verify_hotel_match", return_value=True)
+    @patch("hotel_agent.pipeline.search_hotel_prices")
+    def test_hotel_filter_restricts_bookings(
+        self, mock_search, mock_verify, mock_analysis, mock_notify, tmp_db, config,
+    ):
+        config.serpapi_key = "test-key"
+        h1 = _insert_hotel(tmp_db, name="Namba Oriental Hotel")
+        _insert_booking(tmp_db, h1)
+        h2 = _insert_hotel(tmp_db, name="Tokyo Tower Hotel", city="Tokyo")
+        _insert_booking(tmp_db, h2, booked_price=200000)
+
         mock_search.return_value = SerpAPIResult(snapshots=[], used_cached_token=True)
+
+        result = run_pipeline(
+            config, _make_get_db(config.db_path), hotel_filter="Namba",
+        )
+
+        assert result.scrape_total == 1
+        mock_search.assert_called_once()
+        assert mock_search.call_args.kwargs["hotel"].name == "Namba Oriental Hotel"
+
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=0)
+    @patch("hotel_agent.pipeline.run_analysis", return_value=[])
+    @patch("hotel_agent.pipeline.verify_hotel_match", return_value=True)
+    @patch("hotel_agent.pipeline.search_hotel_prices")
+    def test_hotel_filter_case_insensitive(
+        self, mock_search, mock_verify, mock_analysis, mock_notify, tmp_db, config,
+    ):
+        config.serpapi_key = "test-key"
+        h = _insert_hotel(tmp_db, name="Namba Oriental Hotel")
+        _insert_booking(tmp_db, h)
+        mock_search.return_value = SerpAPIResult(snapshots=[], used_cached_token=True)
+
+        result = run_pipeline(
+            config, _make_get_db(config.db_path), hotel_filter="namba",
+        )
+
+        assert result.scrape_total == 1
+
+    # -- result stats ------------------------------------------------
+
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=3)
+    @patch("hotel_agent.pipeline.run_analysis")
+    @patch("hotel_agent.pipeline.verify_hotel_match", return_value=True)
+    @patch("hotel_agent.pipeline.search_hotel_prices")
+    def test_returns_correct_pipeline_result(
+        self, mock_search, mock_verify, mock_analysis, mock_notify, tmp_db, config,
+    ):
+        config.serpapi_key = "test-key"
+        h = _insert_hotel(tmp_db, name="Namba Oriental Hotel")
+        _insert_booking(tmp_db, h)
+
+        mock_search.return_value = SerpAPIResult(
+            snapshots=[
+                PriceSnapshot(
+                    hotel_id=h,
+                    check_in=date(2026, 8, 31),
+                    check_out=date(2026, 9, 3),
+                    room_type="Standard Double",
+                    platform="Booking.com",
+                    price=120000,
+                    currency="JPY",
+                ),
+            ],
+            matched_name="Namba Oriental Hotel",
+            matched_address="Osaka",
+            property_token="tok",
+            used_cached_token=False,
+        )
         mock_analysis.return_value = [
-            Alert(booking_id=1, snapshot_id=1, alert_type="price_drop", title="Test"),
+            Alert(booking_id=1, snapshot_id=1, alert_type="price_drop",
+                  title="Price drop", message="msg"),
+            Alert(booking_id=1, snapshot_id=2, alert_type="upgrade",
+                  title="Upgrade", message="msg"),
         ]
 
-        result = run_pipeline(cfg, lambda: Database(cfg.db_path))
+        result = run_pipeline(config, _make_get_db(config.db_path))
 
-        assert result.new_alerts == 1
-        assert result.notifications_sent == 2
+        assert result.scrape_total == 1
+        assert result.scrape_success == 1
+        assert result.scrape_failed == 0
+        assert result.new_alerts == 2
+        assert result.notifications_sent == 3
 
-    @patch("hotel_agent.notifications.telegram.notify_alerts", return_value=0)
-    @patch("hotel_agent.analysis.comparator.run_analysis", return_value=[])
-    @patch("hotel_agent.llm.hotel_matcher.verify_hotel_match", return_value=False)
-    @patch("hotel_agent.api.serpapi_client.search_hotel_prices")
-    def test_llm_rejection_skips_hotel(
-        self, mock_search, mock_verify, mock_analysis, mock_notify, tmp_path
+    # -- error handling ----------------------------------------------
+
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=0)
+    @patch("hotel_agent.pipeline.run_analysis", return_value=[])
+    @patch("hotel_agent.pipeline.search_hotel_prices")
+    def test_serpapi_error_recorded_as_failure(
+        self, mock_search, mock_analysis, mock_notify, tmp_db, config,
     ):
-        from hotel_agent.api.serpapi_client import SerpAPIResult
+        config.serpapi_key = "test-key"
+        h = _insert_hotel(tmp_db)
+        _insert_booking(tmp_db, h)
+        mock_search.side_effect = SerpAPIError("rate limit exceeded")
 
-        cfg = _make_config(tmp_path, serpapi_key="test-key")
-        self._seed_db(cfg.db_path)
+        result = run_pipeline(config, _make_get_db(config.db_path))
+
+        assert result.scrape_total == 1
+        assert result.scrape_failed == 1
+        assert result.scrape_success == 0
+        assert any("rate limit" in e for e in result.errors)
+
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=0)
+    @patch("hotel_agent.pipeline.run_analysis", return_value=[])
+    @patch("hotel_agent.pipeline.verify_hotel_match", return_value=False)
+    @patch("hotel_agent.pipeline.search_hotel_prices")
+    def test_llm_rejects_match_counts_as_failed(
+        self, mock_search, mock_verify, mock_analysis, mock_notify, tmp_db, config,
+    ):
+        config.serpapi_key = "test-key"
+        h = _insert_hotel(tmp_db)
+        _insert_booking(tmp_db, h)
 
         mock_search.return_value = SerpAPIResult(
             snapshots=[],
-            matched_name="Wrong Hotel",
-            matched_address="Wrong City",
-            property_token="tok123",
+            matched_name="Wrong Hotel Entirely",
+            matched_address="Unknown City",
+            property_token="tok",
             used_cached_token=False,
         )
 
-        result = run_pipeline(cfg, lambda: Database(cfg.db_path))
+        result = run_pipeline(config, _make_get_db(config.db_path))
 
         assert result.scrape_failed == 1
+        assert result.scrape_success == 0
         assert any("not a match" in e for e in result.errors)
+
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=0)
+    @patch("hotel_agent.pipeline.run_analysis", return_value=[])
+    @patch("hotel_agent.pipeline.search_hotel_prices")
+    def test_missing_dates_skips_scrape_call(
+        self, mock_search, mock_analysis, mock_notify, tmp_db, config,
+    ):
+        """Bookings without check-in/out dates are skipped (no API call)."""
+        config.serpapi_key = "test-key"
+        h = _insert_hotel(tmp_db)
+        _insert_booking(tmp_db, h, check_in=None, check_out=None)
+
+        result = run_pipeline(config, _make_get_db(config.db_path))
+
+        assert result.scrape_total == 1
+        assert result.scrape_failed == 1
+        mock_search.assert_not_called()
+
+    # -- LLM verification paths --------------------------------------
+
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=0)
+    @patch("hotel_agent.pipeline.run_analysis", return_value=[])
+    @patch("hotel_agent.pipeline.verify_hotel_match", return_value=True)
+    @patch("hotel_agent.pipeline.search_hotel_prices")
+    def test_cached_token_skips_llm_verification(
+        self, mock_search, mock_verify, mock_analysis, mock_notify, tmp_db, config,
+    ):
+        """When the property token is cached, the LLM is not consulted."""
+        config.serpapi_key = "test-key"
+        h = _insert_hotel(tmp_db)
+        _insert_booking(tmp_db, h)
+
+        mock_search.return_value = SerpAPIResult(
+            snapshots=[],
+            matched_name="Test Hotel",
+            property_token="cached-tok",
+            used_cached_token=True,
+        )
+
+        run_pipeline(config, _make_get_db(config.db_path))
+
+        mock_verify.assert_not_called()
+
+    @patch("hotel_agent.pipeline.notify_alerts", return_value=0)
+    @patch("hotel_agent.pipeline.run_analysis", return_value=[])
+    @patch("hotel_agent.pipeline.verify_hotel_match", return_value=True)
+    @patch("hotel_agent.pipeline.search_hotel_prices")
+    def test_verified_match_caches_property_token(
+        self, mock_search, mock_verify, mock_analysis, mock_notify, tmp_db, config,
+    ):
+        """An LLM-approved match persists the property token on the hotel."""
+        config.serpapi_key = "test-key"
+        h = _insert_hotel(tmp_db, name="Namba Oriental Hotel")
+        _insert_booking(tmp_db, h)
+
+        mock_search.return_value = SerpAPIResult(
+            snapshots=[],
+            matched_name="Namba Oriental Hotel",
+            matched_address="Osaka",
+            property_token="new-token-abc",
+            used_cached_token=False,
+        )
+
+        run_pipeline(config, _make_get_db(config.db_path))
+
+        mock_verify.assert_called_once()
+        # Token should be persisted in the database
+        with _make_get_db(config.db_path)() as db:
+            hotel = db.get_hotel(h)
+            assert hotel is not None
+            assert hotel.serpapi_property_token == "new-token-abc"
+
+
+# ── Alert dedup ─────────────────────────────────────────
+
+
+class TestAlertDedup:
+    """Tests for alert deduplication via db.alert_exists()."""
+
+    def test_alert_exists_returns_false_when_no_match(self, tmp_db):
+        result = tmp_db.alert_exists(
+            booking_id=999, alert_type="price_drop", snapshot_id=999,
+        )
+        assert result is False
+
+    def test_alert_exists_returns_true_when_match(self, tmp_db):
+        h = _insert_hotel(tmp_db)
+        b = _insert_booking(tmp_db, h)
+        s = tmp_db.add_snapshot(
+            PriceSnapshot(
+                hotel_id=h,
+                check_in=date(2026, 1, 1),
+                check_out=date(2026, 1, 3),
+                room_type="Standard",
+                platform="Booking.com",
+                price=80,
+                currency="JPY",
+            )
+        )
+        tmp_db.add_alert(
+            Alert(
+                booking_id=b,
+                snapshot_id=s,
+                alert_type="price_drop",
+                title="Drop",
+                message="Price dropped",
+            )
+        )
+
+        assert tmp_db.alert_exists(booking_id=b, alert_type="price_drop", snapshot_id=s) is True
+
+    def test_alert_exists_false_for_different_alert_type(self, tmp_db):
+        h = _insert_hotel(tmp_db)
+        b = _insert_booking(tmp_db, h)
+        s = tmp_db.add_snapshot(
+            PriceSnapshot(
+                hotel_id=h,
+                check_in=date(2026, 1, 1),
+                check_out=date(2026, 1, 3),
+                room_type="Standard",
+                platform="Booking.com",
+                price=80,
+                currency="JPY",
+            )
+        )
+        tmp_db.add_alert(
+            Alert(
+                booking_id=b,
+                snapshot_id=s,
+                alert_type="price_drop",
+                title="Drop",
+                message="Price dropped",
+            )
+        )
+
+        # Same booking + snapshot but different alert_type → not a duplicate
+        assert tmp_db.alert_exists(booking_id=b, alert_type="upgrade", snapshot_id=s) is False
+
+    def test_run_analysis_skips_existing_alerts(self, tmp_db, config):
+        """run_analysis does not re-create alerts that already exist in the DB."""
+        from hotel_agent.analysis.comparator import run_analysis
+
+        config.currency.rates = {"JPY": 150.0, "EUR": 0.92}
+
+        h = _insert_hotel(tmp_db)
+        _insert_booking(
+            tmp_db, h, booked_price=200, currency="USD", room_type="Standard Double",
+        )
+        tmp_db.add_snapshot(
+            PriceSnapshot(
+                hotel_id=h,
+                check_in=date(2026, 8, 31),
+                check_out=date(2026, 9, 3),
+                room_type="Standard Double",
+                platform="Booking.com",
+                price=100,
+                currency="USD",
+                is_cancellable=True,
+            )
+        )
+
+        # First analysis run → should produce at least one alert
+        first_alerts = run_analysis(tmp_db, config)
+        assert len(first_alerts) > 0
+
+        # Second run with the same data → duplicates skipped
+        second_alerts = run_analysis(tmp_db, config)
+        assert second_alerts == []
