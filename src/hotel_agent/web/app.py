@@ -19,7 +19,7 @@ from pydantic import SecretStr
 
 from ..config import load_config, save_config, save_secrets
 from ..db import Database
-from ..models import TravelerComposition
+from ..models import Booking, Hotel, TravelerComposition
 from ..utils import PLATFORM_URLS, platform_url
 
 log = logging.getLogger(__name__)
@@ -122,6 +122,120 @@ def create_app(config_path: str | None = None) -> FastAPI:
         )
 
     # ── Booking Edit ────────────────────────────────
+    @app.get("/bookings/new", response_class=HTMLResponse)
+    async def booking_new_page(request: Request):
+        with get_db() as db:
+            hotels = db.get_all_hotels()
+        blank = Booking(travelers=config.travelers)
+        return templates.TemplateResponse(
+            request,
+            "booking_edit.html",
+            {
+                "booking": blank,
+                "hotel": None,
+                "hotels": hotels,
+                "is_new": True,
+                "saved": False,
+                "error": None,
+            },
+        )
+
+    @app.post("/bookings/new", response_class=HTMLResponse)
+    async def booking_new_save(
+        request: Request,
+        hotel_id: int = Form(0),
+        new_hotel_name: str = Form(""),
+        new_hotel_city: str = Form(""),
+        check_in: str = Form(""),
+        check_out: str = Form(""),
+        room_type: str = Form(""),
+        booked_price: float = Form(0.0),
+        currency: str = Form("JPY"),
+        platform: str = Form(""),
+        booking_reference: str = Form(""),
+        booking_url: str = Form(""),
+        status: str = Form("active"),
+        adults: int = Form(2),
+        children_ages: str = Form(""),
+        is_cancellable: str = Form(""),
+        cancellation_deadline: str = Form(""),
+        breakfast_included: str = Form(""),
+        bathroom_type: str = Form("private"),
+        notes: str = Form(""),
+    ):
+        from datetime import date as date_cls
+
+        error = None
+        booking = None
+        hotel = None
+        try:
+            with get_db() as db:
+                # Resolve hotel: existing or new
+                if hotel_id:
+                    h = db.get_hotel(hotel_id)
+                    if not h:
+                        raise ValueError(f"Hotel #{hotel_id} not found")
+                    resolved_hotel_id = hotel_id
+                    hotel = h
+                elif new_hotel_name.strip():
+                    new_h = Hotel(name=new_hotel_name.strip(), city=new_hotel_city.strip())
+                    resolved_hotel_id = db.upsert_hotel(new_h)
+                    hotel = db.get_hotel(resolved_hotel_id)
+                else:
+                    raise ValueError("Select an existing hotel or enter a new hotel name")
+
+                ages: list[int] = []
+                if children_ages.strip():
+                    ages = [int(a.strip()) for a in children_ages.split(",") if a.strip()]
+
+                booking = Booking(
+                    hotel_id=resolved_hotel_id,
+                    check_in=date_cls.fromisoformat(check_in) if check_in else None,
+                    check_out=date_cls.fromisoformat(check_out) if check_out else None,
+                    travelers=TravelerComposition(adults=adults, children_ages=ages),
+                    room_type=room_type,
+                    booked_price=booked_price,
+                    currency=currency,
+                    platform=platform,
+                    booking_reference=booking_reference,
+                    booking_url=booking_url,
+                    status=status,
+                    notes=notes,
+                    is_cancellable=is_cancellable == "1",
+                    cancellation_deadline=(
+                        date_cls.fromisoformat(cancellation_deadline)
+                        if cancellation_deadline
+                        else None
+                    ),
+                    breakfast_included=breakfast_included == "1",
+                    bathroom_type=bathroom_type,
+                )
+                booking_id = db.upsert_booking(booking)
+                booking.id = booking_id
+        except Exception as e:
+            log.exception("Failed to create booking")
+            error = str(e)
+
+        if error:
+            with get_db() as db:
+                hotels = db.get_all_hotels()
+            if not booking:
+                booking = Booking(travelers=config.travelers)
+            return templates.TemplateResponse(
+                request,
+                "booking_edit.html",
+                {
+                    "booking": booking,
+                    "hotel": hotel,
+                    "hotels": hotels,
+                    "is_new": True,
+                    "saved": False,
+                    "error": error,
+                },
+            )
+
+        return RedirectResponse(f"/bookings/{booking.id}/edit", status_code=303)  # type: ignore[union-attr]
+
     @app.get("/bookings/{booking_id}/edit", response_class=HTMLResponse)
     async def booking_edit_page(request: Request, booking_id: int):
         with get_db() as db:
@@ -132,7 +246,14 @@ def create_app(config_path: str | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "booking_edit.html",
-            {"booking": booking, "hotel": hotel, "saved": False, "error": None},
+            {
+                "booking": booking,
+                "hotel": hotel,
+                "hotels": [],
+                "is_new": False,
+                "saved": False,
+                "error": None,
+            },
         )
 
     @app.post("/bookings/{booking_id}/edit", response_class=HTMLResponse)
@@ -202,6 +323,8 @@ def create_app(config_path: str | None = None) -> FastAPI:
             {
                 "booking": booking,
                 "hotel": hotel,
+                "hotels": [],
+                "is_new": False,
                 "saved": error is None,
                 "error": error,
             },

@@ -74,10 +74,8 @@ def setup_logging(verbose: bool = False) -> None:
     for lib in ("httpx", "litellm", "openai", "httpcore", "uvicorn.access"):
         logging.getLogger(lib).setLevel(logging.WARNING)
 
-    logging.getLogger(__name__).debug(
-        "Logging configured: dir=%s, max_bytes=%s, backups=%d, level=%s",
-        log_dir,
-        max_bytes,
-        backup_count,
-        logging.getLevelName(level),
-    )
+    _logger = logging.getLogger("hotel_agent")
+    _logger.info("=" * 60)
+    _logger.info("  HOTEL PRICE TRACKER — SERVER STARTING")
+    _logger.info("  Log dir: %s | Level: %s", log_dir, logging.getLevelName(level))
+    _logger.info("=" * 60)
