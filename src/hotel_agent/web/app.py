@@ -945,48 +945,54 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
         with get_db() as db:
             alerts = db.get_undigested_alerts()
-            # Fall back to recent alerts if all have been digested (for testing)
+
             if not alerts:
-                alerts = db.get_recent_alerts(limit=20)
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "error": "No un-digested alerts to include",
+                    },
+                )
 
-        if not alerts:
+            # Generate summary
+            summary = ""
+            with contextlib.suppress(Exception):
+                summary = scheduler._generate_digest_summary(alerts)
+
+            recipients = config.notifications.email.recipients
+            gmail_user = config.gmail_user.get_secret_value()
+            gmail_pass = config.gmail_app_password.get_secret_value()
+
+            if not gmail_user or not gmail_pass:
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "error": "Gmail credentials not configured (set GMAIL_USER and GMAIL_APP_PASSWORD in Config > Secrets)",
+                    },
+                )
+            if not recipients:
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "error": "No email recipients configured (set in Config > Notifications > Recipients)",
+                    },
+                )
+
+            ok = send_digest_email(config, alerts, summary=summary)
+            if ok:
+                # Mark all alerts as digested
+                for a in alerts:
+                    if a.id:
+                        db.mark_alert_notified(a.id, "digest")
+                return JSONResponse(
+                    {"success": True, "alerts": len(alerts), "recipients": recipients}
+                )
             return JSONResponse(
                 {
                     "success": False,
-                    "error": "No alerts found to include in test digest",
+                    "error": "Email send failed (check server logs for SMTP details)",
                 },
             )
-
-        # Generate summary
-        summary = ""
-        with contextlib.suppress(Exception):
-            summary = scheduler._generate_digest_summary(alerts)
-
-        recipients = config.notifications.email.recipients
-        gmail_user = config.gmail_user.get_secret_value()
-        gmail_pass = config.gmail_app_password.get_secret_value()
-
-        if not gmail_user or not gmail_pass:
-            return JSONResponse(
-                {
-                    "success": False,
-                    "error": "Gmail credentials not configured (set GMAIL_USER and GMAIL_APP_PASSWORD in Config > Secrets)",
-                },
-            )
-        if not recipients:
-            return JSONResponse(
-                {
-                    "success": False,
-                    "error": "No email recipients configured (set in Config > Notifications > Recipients)",
-                },
-            )
-
-        ok = send_digest_email(config, alerts, summary=summary)
-        if ok:
-            return JSONResponse({"success": True, "alerts": len(alerts), "recipients": recipients})
-        return JSONResponse(
-            {"success": False, "error": "Email send failed (check server logs for SMTP details)"},
-        )
 
     @app.post("/api/test-telegram")
     async def test_telegram():
