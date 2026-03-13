@@ -30,7 +30,7 @@ def _make_config(**kwargs) -> ScheduleConfig:
 
 def _make_app_config(tmp_path) -> AppConfig:
     """Create a minimal AppConfig for Scheduler tests."""
-    cfg = AppConfig()
+    cfg = AppConfig(_env_file=None)
     cfg.db_path = str(tmp_path / "test.db")
     return cfg
 

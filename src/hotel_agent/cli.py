@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import sys
 from pathlib import Path
@@ -29,16 +28,9 @@ console = Console(force_terminal=True)
 
 
 def _setup_logging(verbose: bool = False):
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
-    )
-    # Quiet noisy libraries
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("litellm").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
+    from .logging_setup import setup_logging
+
+    setup_logging(verbose=verbose)
 
 
 @app.command(name="import")
@@ -173,10 +165,12 @@ def status(
 
     # Show config summary
     tg_status = (
-        "[green]enabled[/green]" if config.notifications.telegram_enabled else "[dim]disabled[/dim]"
+        "[green]enabled[/green]" if config.notifications.telegram.enabled else "[dim]disabled[/dim]"
     )
     em_status = (
-        "[green]enabled[/green]" if config.notifications.email_enabled else "[dim]disabled[/dim]"
+        "[green]enabled[/green]"
+        if config.notifications.email.triggered_enabled or config.notifications.email.digest_enabled
+        else "[dim]disabled[/dim]"
     )
     console.print(f"\n  LLM provider:      [cyan]{config.llm.provider}[/cyan]")
     console.print(f"  Model:             [cyan]{config.llm.model}[/cyan]")
@@ -311,7 +305,7 @@ def scrape(
 
     config = load_config(config_path)
 
-    if not config.serpapi_key:
+    if not config.serpapi_key.get_secret_value():
         console.print(
             "[red]SERPAPI_KEY not configured. Set it in .env or as an environment variable.[/red]"
         )
@@ -367,7 +361,7 @@ def scrape(
 
         try:
             result = search_hotel_prices(
-                api_key=config.serpapi_key,
+                api_key=config.serpapi_key.get_secret_value(),
                 hotel=hotel,
                 check_in=booking.check_in,
                 check_out=booking.check_out,

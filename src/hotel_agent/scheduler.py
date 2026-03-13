@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -59,6 +60,9 @@ class ScheduleConfig:
     # bookkeeping
     last_run_at: str = ""
     next_run_at: str = ""
+    last_digest_at: str = ""
+    last_digest_status: str = ""  # "sent (N alerts)" | "skipped: no alerts" | "failed: ..." | ""
+    last_digest_alerts: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -120,6 +124,19 @@ def compute_next_run(cfg: ScheduleConfig, now: datetime | None = None) -> dateti
 
     # Unknown mode — default to 12h
     return now + timedelta(hours=12)
+
+
+def _clean_llm_summary(text: str) -> str:
+    """Strip markdown artifacts from LLM output so it renders cleanly in HTML emails."""
+    # Remove **bold** and *italic* markers
+    text = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
+    # Remove # headings
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Remove markdown links [text](url) → text
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    # Collapse multiple newlines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 # ── Scheduler engine ────────────────────────────────────
@@ -245,20 +262,33 @@ class Scheduler:
             self._sched.next_run_at = next_dt.isoformat()
             self.save_state()
 
-            # Sleep until next run (interruptible)
-            wait_seconds = max(0, (next_dt - datetime.now()).total_seconds())
+            # Calculate wakeup: min of next pipeline run and next digest time
+            wakeup = next_dt
+            digest_due = self._next_digest_time()
+            if digest_due and digest_due < wakeup:
+                wakeup = digest_due
+
+            wait_seconds = max(0, (wakeup - datetime.now()).total_seconds())
             if wait_seconds > 0:
-                log.debug("Scheduler sleeping %.0f seconds until %s", wait_seconds, next_dt)
+                log.debug("Scheduler sleeping %.0f seconds until %s", wait_seconds, wakeup)
                 if self._stop_event.wait(timeout=wait_seconds):
-                    break  # stop() was called
+                    break
 
             if self._stop_event.is_set():
                 break
 
+            # Always check digest first (independent of pipeline)
+            self._maybe_send_digest()
+
+            # Only run pipeline if it's actually time
+            now = datetime.now()
+            if now < next_dt - timedelta(seconds=5):
+                # Woke up for digest, not pipeline — loop back
+                continue
+
             # Try to acquire pipeline lock
             if not pipeline_lock.acquire(blocking=False):
                 log.info("Scheduler: pipeline busy, skipping this cycle")
-                # Wait a bit then try next cycle
                 self._stop_event.wait(timeout=60)
                 continue
 
@@ -287,6 +317,9 @@ class Scheduler:
                 if self._on_run_end:
                     self._on_run_end(summary)
 
+                # Re-check digest after pipeline (may have generated new alerts)
+                self._maybe_send_digest()
+
             except Exception:
                 log.exception("Scheduler: pipeline run crashed")
                 self._sched.last_run_at = datetime.now().isoformat()
@@ -294,5 +327,126 @@ class Scheduler:
             finally:
                 pipeline_lock.release()
 
-            # Small delay before computing next cycle
             time.sleep(1)
+
+    def _next_digest_time(self) -> datetime | None:
+        """Return the next digest send time, or None if digest is disabled."""
+        if not self._app_config.notifications.email.digest_enabled:
+            return None
+
+        now = datetime.now()
+        h, m = _parse_time(self._app_config.notifications.email.digest_time)
+        today_at = now.replace(hour=h, minute=m, second=0, microsecond=0)
+
+        # Already sent today?
+        if self._sched.last_digest_at:
+            last = datetime.fromisoformat(self._sched.last_digest_at)
+            if last.date() >= now.date():
+                # Next digest is tomorrow
+                return today_at + timedelta(days=1)
+
+        # Haven't sent today — is digest time still ahead?
+        if today_at > now:
+            return today_at
+        # Digest time already passed and we haven't sent — due now
+        return now
+
+    def _maybe_send_digest(self) -> None:
+        """Send a digest email if the configured digest time has passed since the last digest."""
+        if not self._app_config.notifications.email.digest_enabled:
+            return
+
+        now = datetime.now()
+        h, m = _parse_time(self._app_config.notifications.email.digest_time)
+        digest_time_today = now.replace(hour=h, minute=m, second=0, microsecond=0)
+
+        # Only send if we're past the digest time today
+        if now < digest_time_today:
+            log.debug(
+                "Scheduler: digest not due yet (now=%s, due=%s)",
+                now.strftime("%H:%M"),
+                f"{h:02d}:{m:02d}",
+            )
+            return
+
+        # Only send once per day
+        if self._sched.last_digest_at:
+            last = datetime.fromisoformat(self._sched.last_digest_at)
+            if last.date() >= now.date():
+                return
+
+        log.info(
+            "Scheduler: digest email is due (time=%s, last=%s)",
+            f"{h:02d}:{m:02d}",
+            self._sched.last_digest_at or "never",
+        )
+
+        # Get alerts that haven't been digested yet
+        try:
+            with self._get_db() as db:
+                alerts = db.get_undigested_alerts()
+
+            if not alerts:
+                log.info("Scheduler: no undigested alerts, skipping")
+                self._sched.last_digest_at = now.isoformat()
+                self._sched.last_digest_status = "skipped: no new alerts"
+                self._sched.last_digest_alerts = 0
+                self.save_state()
+                return
+
+            # Generate LLM summary
+            summary = self._generate_digest_summary(alerts)
+
+            from .notifications.email import send_digest_email
+
+            if send_digest_email(self._app_config, alerts, summary=summary):
+                log.info("Scheduler: digest email sent with %d alerts", len(alerts))
+                self._sched.last_digest_status = f"sent ({len(alerts)} alerts)"
+                self._sched.last_digest_alerts = len(alerts)
+                # Mark all included alerts as digested
+                with self._get_db() as db:
+                    for a in alerts:
+                        if a.id:
+                            db.mark_alert_notified(a.id, "digest")
+            else:
+                log.warning("Scheduler: digest email failed")
+                self._sched.last_digest_status = (
+                    "failed: email send returned false (check Gmail credentials and recipients)"
+                )
+                self._sched.last_digest_alerts = 0
+
+            self._sched.last_digest_at = now.isoformat()
+            self.save_state()
+
+        except Exception as exc:
+            log.exception("Scheduler: digest email crashed")
+            self._sched.last_digest_status = f"failed: {str(exc)[:120]}"
+            self._sched.last_digest_alerts = 0
+            self._sched.last_digest_at = now.isoformat()
+            self.save_state()
+
+    def _generate_digest_summary(self, alerts: list) -> str:
+        """Use LLM to generate a brief summary of the alerts for the digest."""
+        try:
+            from .llm.client import call_llm
+
+            alert_texts = []
+            for a in alerts[:20]:  # limit to avoid token overflow
+                alert_texts.append(
+                    f"- [{a.severity}] {a.title}: savings {a.price_diff:,.0f} ({a.percentage_diff:.1f}%)"
+                )
+
+            prompt = (
+                "Summarize these hotel price alerts in 2-3 sentences. "
+                "Focus on the best deals and most important findings. "
+                "Be concise and actionable.\n\n"
+                "IMPORTANT: Return ONLY plain text. Do NOT use any markdown formatting "
+                "such as **bold**, *italic*, #headings, or bullet points. "
+                "Write normal sentences only.\n\n" + "\n".join(alert_texts)
+            )
+
+            summary = call_llm(self._app_config, prompt, temperature=0.3, max_tokens=200)
+            return _clean_llm_summary(summary)
+        except Exception:
+            log.warning("Scheduler: LLM summary generation failed, sending digest without summary")
+            return ""

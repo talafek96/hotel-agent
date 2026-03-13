@@ -343,6 +343,7 @@
             <span style="font-size:1.6rem;">&#9200;</span>
             <div>
                 <div class="sched-title">Scheduler</div>
+                <div id="sched-digest-line" style="font-size:.75rem; color:rgba(255,255,255,.5); margin-top:.15rem;"></div>
             </div>
         </div>
         <span id="sched-pill" class="sched-status-pill paused">
@@ -358,10 +359,23 @@
     var pillText = document.getElementById('sched-pill-text');
     var dot = pill.querySelector('.dot');
     var countdown = document.getElementById('sched-countdown');
+    var digestLine = document.getElementById('sched-digest-line');
     var tickInterval = null;
 
     function updateScheduler() {
         fetch('/api/scheduler/status').then(function(r){return r.json()}).then(function(sched) {
+            // Digest line
+            if (sched.digest_enabled) {
+                var dText = 'Digest: ' + sched.digest_time;
+                if (sched.next_digest_at) {
+                    dText += ' (next: ' + sched.next_digest_at.substring(11,16) + ')';
+                }
+                digestLine.style.color = 'rgba(255,255,255,.7)';
+                digestLine.textContent = dText;
+            } else {
+                digestLine.textContent = 'Digest: off';
+            }
+
             if (!sched.active) {
                 pill.className = 'sched-status-pill paused';
                 pillText.textContent = 'Paused';

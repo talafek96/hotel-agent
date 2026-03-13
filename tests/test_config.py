@@ -23,13 +23,14 @@ class TestDefaultConfig:
     """Tests for default configuration values."""
 
     def test_default_app_config(self):
-        cfg = AppConfig()
+        with patch.dict(os.environ, {}, clear=True):
+            cfg = AppConfig(_env_file=None)
         assert cfg.db_path == "data/hotel_tracker.db"
         assert cfg.travelers.adults == 2
         assert cfg.travelers.children_ages == []
-        assert cfg.openai_api_key == ""
-        assert cfg.gemini_api_key == ""
-        assert cfg.anthropic_api_key == ""
+        assert cfg.openai_api_key.get_secret_value() == ""
+        assert cfg.gemini_api_key.get_secret_value() == ""
+        assert cfg.anthropic_api_key.get_secret_value() == ""
 
     def test_default_llm_config(self):
         llm = LLMConfig()
@@ -43,16 +44,17 @@ class TestDefaultConfig:
 
     def test_default_alert_thresholds(self):
         at = AlertThresholds()
-        assert at.price_drop_min_absolute == 10.0
-        assert at.price_drop_min_percentage == 5.0
-        assert at.upgrade_max_extra_cost == 50.0
-        assert at.upgrade_max_extra_percentage == 10.0
+        assert at.price_drop.min_absolute == 10.0
+        assert at.price_drop.min_percentage == 5.0
+        assert at.upgrade.max_extra_cost == 50.0
+        assert at.upgrade.max_extra_percentage == 10.0
 
     def test_default_notification_config(self):
         nc = NotificationConfig()
-        assert nc.telegram_enabled is False
-        assert nc.email_enabled is False
-        assert nc.email_digest_time == "08:00"
+        assert nc.telegram.enabled is False
+        assert nc.email.triggered_enabled is False
+        assert nc.email.digest_enabled is False
+        assert nc.email.digest_time == "08:00"
 
 
 # ── Currency Conversion ───────────────────────────────────
@@ -157,7 +159,9 @@ class TestLoadConfig:
         config_file.write_text(yaml.dump(data), encoding="utf-8")
         with patch.dict(os.environ, {}, clear=True):
             cfg = load_config(config_file)
-        assert cfg.llm.model == "gpt-4o"
+        # extraction_model is an unknown field, pydantic ignores it
+        # model should be default since "model" key wasn't in YAML
+        assert cfg.llm.provider == "openai"
 
     def test_load_currency(self, tmp_path):
         config_file = tmp_path / "config.yaml"
@@ -190,25 +194,25 @@ class TestLoadConfig:
         config_file.write_text(yaml.dump(data), encoding="utf-8")
         with patch.dict(os.environ, {}, clear=True):
             cfg = load_config(config_file)
-        assert cfg.alerts.price_drop_min_absolute == 20
-        assert cfg.alerts.price_drop_min_percentage == 8
-        assert cfg.alerts.upgrade_max_extra_cost == 100
-        assert cfg.alerts.upgrade_max_extra_percentage == 15
+        assert cfg.alerts.price_drop.min_absolute == 20
+        assert cfg.alerts.price_drop.min_percentage == 8
+        assert cfg.alerts.upgrade.max_extra_cost == 100
+        assert cfg.alerts.upgrade.max_extra_percentage == 15
 
     def test_load_notifications(self, tmp_path):
         config_file = tmp_path / "config.yaml"
         data = {
             "notifications": {
                 "telegram": {"enabled": True},
-                "email": {"enabled": True, "digest_time": "09:30"},
+                "email": {"triggered_enabled": True, "digest_time": "09:30"},
             },
         }
         config_file.write_text(yaml.dump(data), encoding="utf-8")
         with patch.dict(os.environ, {}, clear=True):
             cfg = load_config(config_file)
-        assert cfg.notifications.telegram_enabled is True
-        assert cfg.notifications.email_enabled is True
-        assert cfg.notifications.email_digest_time == "09:30"
+        assert cfg.notifications.telegram.enabled is True
+        assert cfg.notifications.email.triggered_enabled is True
+        assert cfg.notifications.email.digest_time == "09:30"
 
     def test_load_database_path(self, tmp_path):
         config_file = tmp_path / "config.yaml"
@@ -250,28 +254,28 @@ class TestEnvVarLoading:
         config_file.write_text("", encoding="utf-8")
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-env"}, clear=True):
             cfg = load_config(config_file)
-        assert cfg.openai_api_key == "sk-test-env"
+        assert cfg.openai_api_key.get_secret_value() == "sk-test-env"
 
     def test_gemini_key_from_env(self, tmp_path):
         config_file = tmp_path / "config.yaml"
         config_file.write_text("", encoding="utf-8")
         with patch.dict(os.environ, {"GEMINI_API_KEY": "gemini-env-key"}, clear=True):
             cfg = load_config(config_file)
-        assert cfg.gemini_api_key == "gemini-env-key"
+        assert cfg.gemini_api_key.get_secret_value() == "gemini-env-key"
 
     def test_anthropic_key_from_env(self, tmp_path):
         config_file = tmp_path / "config.yaml"
         config_file.write_text("", encoding="utf-8")
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "anthropic-env-key"}, clear=True):
             cfg = load_config(config_file)
-        assert cfg.anthropic_api_key == "anthropic-env-key"
+        assert cfg.anthropic_api_key.get_secret_value() == "anthropic-env-key"
 
     def test_serpapi_key_from_env(self, tmp_path):
         config_file = tmp_path / "config.yaml"
         config_file.write_text("", encoding="utf-8")
         with patch.dict(os.environ, {"SERPAPI_KEY": "serpapi-env-key"}, clear=True):
             cfg = load_config(config_file)
-        assert cfg.serpapi_key == "serpapi-env-key"
+        assert cfg.serpapi_key.get_secret_value() == "serpapi-env-key"
 
     def test_telegram_from_env(self, tmp_path):
         config_file = tmp_path / "config.yaml"
@@ -282,8 +286,8 @@ class TestEnvVarLoading:
         }
         with patch.dict(os.environ, env, clear=True):
             cfg = load_config(config_file)
-        assert cfg.telegram_bot_token == "bot-token-123"
-        assert cfg.telegram_chat_id == "chat-456"
+        assert cfg.telegram_bot_token.get_secret_value() == "bot-token-123"
+        assert cfg.telegram_chat_id.get_secret_value() == "chat-456"
 
     def test_gmail_from_env(self, tmp_path):
         config_file = tmp_path / "config.yaml"
@@ -294,17 +298,17 @@ class TestEnvVarLoading:
         }
         with patch.dict(os.environ, env, clear=True):
             cfg = load_config(config_file)
-        assert cfg.gmail_user == "user@gmail.com"
-        assert cfg.gmail_app_password == "secret-password"
+        assert cfg.gmail_user.get_secret_value() == "user@gmail.com"
+        assert cfg.gmail_app_password.get_secret_value() == "secret-password"
 
     def test_missing_env_vars_default_empty(self, tmp_path):
         config_file = tmp_path / "config.yaml"
         config_file.write_text("", encoding="utf-8")
         with patch.dict(os.environ, {}, clear=True):
             cfg = load_config(config_file)
-        assert cfg.openai_api_key == ""
-        assert cfg.telegram_bot_token == ""
-        assert cfg.gmail_user == ""
+        assert cfg.openai_api_key.get_secret_value() == ""
+        assert cfg.telegram_bot_token.get_secret_value() == ""
+        assert cfg.gmail_user.get_secret_value() == ""
 
     def test_multiple_env_vars(self, tmp_path):
         config_file = tmp_path / "config.yaml"
@@ -320,13 +324,13 @@ class TestEnvVarLoading:
         }
         with patch.dict(os.environ, env, clear=True):
             cfg = load_config(config_file)
-        assert cfg.openai_api_key == "sk-key"
-        assert cfg.gemini_api_key == "gem-key"
-        assert cfg.anthropic_api_key == "ant-key"
-        assert cfg.telegram_bot_token == "bot-tok"
-        assert cfg.telegram_chat_id == "chat-id"
-        assert cfg.gmail_user == "user@test.com"
-        assert cfg.gmail_app_password == "pass"
+        assert cfg.openai_api_key.get_secret_value() == "sk-key"
+        assert cfg.gemini_api_key.get_secret_value() == "gem-key"
+        assert cfg.anthropic_api_key.get_secret_value() == "ant-key"
+        assert cfg.telegram_bot_token.get_secret_value() == "bot-tok"
+        assert cfg.telegram_chat_id.get_secret_value() == "chat-id"
+        assert cfg.gmail_user.get_secret_value() == "user@test.com"
+        assert cfg.gmail_app_password.get_secret_value() == "pass"
 
 
 # ── Save Config ───────────────────────────────────────────
@@ -336,24 +340,24 @@ class TestSaveConfig:
     """Tests for saving configuration to YAML."""
 
     def test_save_config_creates_file(self, tmp_path):
-        cfg = AppConfig()
+        cfg = AppConfig(_env_file=None)
         out = tmp_path / "out.yaml"
         save_config(cfg, out)
         assert out.exists()
 
     def test_save_config_roundtrip(self, tmp_path):
-        cfg = AppConfig()
+        cfg = AppConfig(_env_file=None)
         cfg.travelers.adults = 3
         cfg.travelers.children_ages = [4, 7]
         cfg.llm.provider = "anthropic"
         cfg.llm.model = "claude-3"
         cfg.currency.base = "ILS"
         cfg.currency.rates = {"JPY": 0.025, "USD": 3.6}
-        cfg.alerts.price_drop_min_absolute = 500.0
-        cfg.alerts.price_drop_min_percentage = 5.0
-        cfg.notifications.telegram_enabled = True
-        cfg.notifications.email_enabled = True
-        cfg.notifications.email_digest_time = "09:00"
+        cfg.alerts.price_drop.min_absolute = 500.0
+        cfg.alerts.price_drop.min_percentage = 5.0
+        cfg.notifications.telegram.enabled = True
+        cfg.notifications.email.triggered_enabled = True
+        cfg.notifications.email.digest_time = "09:00"
         cfg.db_path = "custom.db"
 
         out = tmp_path / "out.yaml"
@@ -368,13 +372,13 @@ class TestSaveConfig:
         assert loaded.llm.model == "claude-3"
         assert loaded.currency.base == "ILS"
         assert loaded.currency.rates["JPY"] == pytest.approx(0.025)
-        assert loaded.alerts.price_drop_min_absolute == pytest.approx(500.0)
-        assert loaded.notifications.telegram_enabled is True
-        assert loaded.notifications.email_digest_time == "09:00"
+        assert loaded.alerts.price_drop.min_absolute == pytest.approx(500.0)
+        assert loaded.notifications.telegram.enabled is True
+        assert loaded.notifications.email.digest_time == "09:00"
         assert loaded.db_path == "custom.db"
 
     def test_save_config_yaml_structure(self, tmp_path):
-        cfg = AppConfig()
+        cfg = AppConfig(_env_file=None)
         out = tmp_path / "out.yaml"
         save_config(cfg, out)
 

@@ -32,7 +32,7 @@ def tmp_db(tmp_path):
 @pytest.fixture
 def config(tmp_path):
     """Create a test config with a temp database."""
-    cfg = AppConfig()
+    cfg = AppConfig(_env_file=None)
     cfg.db_path = str(tmp_path / "test.db")
     cfg.travelers = TravelerComposition(adults=2, children_ages=[4, 7])
     return cfg

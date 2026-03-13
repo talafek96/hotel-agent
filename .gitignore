@@ -14,6 +14,7 @@ build/
 data/*.db
 data/*.json
 data/screenshots/
+outputs/
 .env
 config.yaml
 *.xlsx
@@ -30,3 +31,4 @@ Thumbs.db
 # AI Agents
 .cognition/
 PROMPT.md
+.env_backup

@@ -185,8 +185,89 @@
             {% endif %}
             <div>Mode: <strong>{{ sched.mode|capitalize }}</strong></div>
         </div>
+
+        <!-- Digest status -->
+        <div id="digest-status" class="sched-meta-row" style="margin-top:.75rem; padding-top:.75rem; border-top:1px solid rgba(255,255,255,.1);"></div>
     </div>
 </div>
+
+<script>
+var showTestButtons = {{ show_test_buttons|tojson }};
+(function() {
+    fetch('/api/scheduler/status').then(function(r){return r.json()}).then(function(data) {
+        var el = document.getElementById('digest-status');
+        if (!data.digest_enabled) {
+            el.innerHTML = '<div>Daily Digest: <strong style="color:rgba(255,255,255,.4);">Disabled</strong> <span style="font-size:.75rem;">(enable in <a href="/config" style="color:#fde68a;">Config</a>)</span></div>';
+            return;
+        }
+        var parts = ['<div>Daily Digest: <strong style="color:#6ee7b7;">Enabled</strong> at <strong>' + data.digest_time + '</strong></div>'];
+        if (data.last_digest_at) {
+            parts.push('<div>Last digest: <strong>' + data.last_digest_at.substring(0,19) + '</strong></div>');
+        }
+        if (data.last_digest_status) {
+            var isOk = data.last_digest_status.startsWith('sent');
+            var isSkip = data.last_digest_status.startsWith('skipped');
+            var color = isOk ? '#6ee7b7' : (isSkip ? 'rgba(255,255,255,.5)' : '#fca5a5');
+            parts.push('<div>Result: <strong style="color:' + color + ';">' + data.last_digest_status + '</strong></div>');
+        }
+        if (data.next_digest_at) {
+            parts.push('<div>Next digest: <strong>' + data.next_digest_at.substring(0,19) + '</strong></div>');
+        }
+        if (!data.active) {
+            parts.push('<div style="color:#fca5a5;">Scheduler must be running for digest to send</div>');
+        }
+        if (showTestButtons) {
+            parts.push('<div style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">');
+            parts.push('<button onclick="testTelegram(this)" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);padding:.35rem .85rem;border-radius:.375rem;font-size:.75rem;font-weight:600;cursor:pointer;">Send Test Telegram</button>');
+            parts.push('<button onclick="testDigest(this)" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);padding:.35rem .85rem;border-radius:.375rem;font-size:.75rem;font-weight:600;cursor:pointer;">Send Test Digest</button>');
+            parts.push('<span id="sched-test-result" style="font-size:.75rem;margin-left:.5rem;"></span>');
+            parts.push('</div>');
+        }
+        el.innerHTML = parts.join('');
+    });
+})();
+
+function _showSchedTestResult(el, data) {
+    if (data.success) {
+        el.style.color = '#6ee7b7';
+        var msg = 'Sent!';
+        if (data.alerts) msg += ' (' + data.alerts + ' alerts)';
+        if (data.recipients) msg += ' to ' + data.recipients.join(', ');
+        if (data.messages) msg += ' in ' + data.messages + ' message(s)';
+        if (data.message) msg += ' — ' + data.message;
+        el.textContent = msg;
+    } else {
+        el.style.color = '#fca5a5';
+        el.textContent = data.error || 'Unknown error';
+    }
+}
+
+function testTelegram(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    var resultEl = document.getElementById('sched-test-result');
+    resultEl.textContent = '';
+
+    fetch('/api/test-telegram', {method:'POST'})
+        .then(function(r){return r.json()})
+        .then(function(data) { _showSchedTestResult(resultEl, data); })
+        .catch(function(e) { resultEl.style.color = '#fca5a5'; resultEl.textContent = e.message; })
+        .finally(function() { btn.disabled = false; btn.textContent = 'Send Test Telegram'; });
+}
+
+function testDigest(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    var resultEl = document.getElementById('sched-test-result');
+    resultEl.textContent = '';
+
+    fetch('/api/scheduler/test-digest', {method:'POST'})
+        .then(function(r){return r.json()})
+        .then(function(data) { _showSchedTestResult(resultEl, data); })
+        .catch(function(e) { resultEl.style.color = '#fca5a5'; resultEl.textContent = e.message; })
+        .finally(function() { btn.disabled = false; btn.textContent = 'Send Test Digest'; });
+}
+</script>
 
 {% if saved %}
 <div class="alert-box alert-success" style="animation:fadeInUp .3s ease-out;">Schedule saved successfully.</div>

@@ -3,6 +3,9 @@
 {% block topbar_title %}Bookings{% endblock %}
 {% block content %}
 <h1>Active Bookings ({{ bookings|length }})</h1>
+<div style="margin-bottom:1.25rem;">
+    <a href="/bookings/new" class="btn btn-primary">+ Add Booking</a>
+</div>
 
 {% if not bookings %}
 <div class="alert-box alert-info">No active bookings. <a href="/import">Import from Excel</a> to get started.</div>

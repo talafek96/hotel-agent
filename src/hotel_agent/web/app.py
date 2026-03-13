@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json as json_mod
 import logging
 import os
@@ -14,10 +15,11 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import SecretStr
 
-from ..config import load_config, save_config
+from ..config import load_config, save_config, save_secrets
 from ..db import Database
-from ..models import TravelerComposition
+from ..models import Booking, Hotel, TravelerComposition
 from ..utils import PLATFORM_URLS, platform_url
 
 log = logging.getLogger(__name__)
@@ -27,6 +29,10 @@ TEMPLATE_DIR = Path(__file__).parent / "templates"
 
 def create_app(config_path: str | None = None) -> FastAPI:
     """Create and configure the FastAPI application."""
+    from ..logging_setup import setup_logging
+
+    setup_logging()
+
     if config_path is None:
         config_path = os.environ.get("HOTEL_AGENT_CONFIG", "config.yaml")
     app = FastAPI(title="Hotel Price Tracker")
@@ -43,7 +49,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
     async def dashboard(request: Request):
         with get_db() as db:
             stats = db.get_stats()
-            alerts = db.get_pending_alerts()
+            alerts = db.get_recent_alerts(limit=10)
             bookings = db.get_active_bookings()
             # Enrich bookings with hotel names
             booking_data = []
@@ -65,7 +71,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
             "dashboard.html",
             {
                 "stats": stats,
-                "alerts": alerts[:10],
+                "alerts": alerts,
                 "bookings": booking_data[:10],
             },
         )
@@ -116,6 +122,120 @@ def create_app(config_path: str | None = None) -> FastAPI:
         )
 
     # ── Booking Edit ────────────────────────────────
+    @app.get("/bookings/new", response_class=HTMLResponse)
+    async def booking_new_page(request: Request):
+        with get_db() as db:
+            hotels = db.get_all_hotels()
+        blank = Booking(travelers=config.travelers)
+        return templates.TemplateResponse(
+            request,
+            "booking_edit.html",
+            {
+                "booking": blank,
+                "hotel": None,
+                "hotels": hotels,
+                "is_new": True,
+                "saved": False,
+                "error": None,
+            },
+        )
+
+    @app.post("/bookings/new", response_class=HTMLResponse)
+    async def booking_new_save(
+        request: Request,
+        hotel_id: int = Form(0),
+        new_hotel_name: str = Form(""),
+        new_hotel_city: str = Form(""),
+        check_in: str = Form(""),
+        check_out: str = Form(""),
+        room_type: str = Form(""),
+        booked_price: float = Form(0.0),
+        currency: str = Form("JPY"),
+        platform: str = Form(""),
+        booking_reference: str = Form(""),
+        booking_url: str = Form(""),
+        status: str = Form("active"),
+        adults: int = Form(2),
+        children_ages: str = Form(""),
+        is_cancellable: str = Form(""),
+        cancellation_deadline: str = Form(""),
+        breakfast_included: str = Form(""),
+        bathroom_type: str = Form("private"),
+        notes: str = Form(""),
+    ):
+        from datetime import date as date_cls
+
+        error = None
+        booking = None
+        hotel = None
+        try:
+            with get_db() as db:
+                # Resolve hotel: existing or new
+                if hotel_id:
+                    h = db.get_hotel(hotel_id)
+                    if not h:
+                        raise ValueError(f"Hotel #{hotel_id} not found")
+                    resolved_hotel_id = hotel_id
+                    hotel = h
+                elif new_hotel_name.strip():
+                    new_h = Hotel(name=new_hotel_name.strip(), city=new_hotel_city.strip())
+                    resolved_hotel_id = db.upsert_hotel(new_h)
+                    hotel = db.get_hotel(resolved_hotel_id)
+                else:
+                    raise ValueError("Select an existing hotel or enter a new hotel name")
+
+                ages: list[int] = []
+                if children_ages.strip():
+                    ages = [int(a.strip()) for a in children_ages.split(",") if a.strip()]
+
+                booking = Booking(
+                    hotel_id=resolved_hotel_id,
+                    check_in=date_cls.fromisoformat(check_in) if check_in else None,
+                    check_out=date_cls.fromisoformat(check_out) if check_out else None,
+                    travelers=TravelerComposition(adults=adults, children_ages=ages),
+                    room_type=room_type,
+                    booked_price=booked_price,
+                    currency=currency,
+                    platform=platform,
+                    booking_reference=booking_reference,
+                    booking_url=booking_url,
+                    status=status,
+                    notes=notes,
+                    is_cancellable=is_cancellable == "1",
+                    cancellation_deadline=(
+                        date_cls.fromisoformat(cancellation_deadline)
+                        if cancellation_deadline
+                        else None
+                    ),
+                    breakfast_included=breakfast_included == "1",
+                    bathroom_type=bathroom_type,
+                )
+                booking_id = db.upsert_booking(booking)
+                booking.id = booking_id
+        except Exception as e:
+            log.exception("Failed to create booking")
+            error = str(e)
+
+        if error:
+            with get_db() as db:
+                hotels = db.get_all_hotels()
+            if not booking:
+                booking = Booking(travelers=config.travelers)
+            return templates.TemplateResponse(
+                request,
+                "booking_edit.html",
+                {
+                    "booking": booking,
+                    "hotel": hotel,
+                    "hotels": hotels,
+                    "is_new": True,
+                    "saved": False,
+                    "error": error,
+                },
+            )
+
+        return RedirectResponse(f"/bookings/{booking.id}/edit", status_code=303)  # type: ignore[union-attr]
+
     @app.get("/bookings/{booking_id}/edit", response_class=HTMLResponse)
     async def booking_edit_page(request: Request, booking_id: int):
         with get_db() as db:
@@ -126,7 +246,14 @@ def create_app(config_path: str | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "booking_edit.html",
-            {"booking": booking, "hotel": hotel, "saved": False, "error": None},
+            {
+                "booking": booking,
+                "hotel": hotel,
+                "hotels": [],
+                "is_new": False,
+                "saved": False,
+                "error": None,
+            },
         )
 
     @app.post("/bookings/{booking_id}/edit", response_class=HTMLResponse)
@@ -196,6 +323,8 @@ def create_app(config_path: str | None = None) -> FastAPI:
             {
                 "booking": booking,
                 "hotel": hotel,
+                "hotels": [],
+                "is_new": False,
                 "saved": error is None,
                 "error": error,
             },
@@ -267,7 +396,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
     @app.get("/alerts", response_class=HTMLResponse)
     async def alerts_page(request: Request):
         with get_db() as db:
-            alerts = db.get_pending_alerts()
+            alerts = db.get_recent_alerts(limit=200)
             alert_data = []
             for a in alerts:
                 hotel = None
@@ -420,7 +549,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 scrape_state["run_id"] = run_id
                 scrape_state["total"] = len(all_bookings)
 
-                if not config.serpapi_key:
+                if not config.serpapi_key.get_secret_value():
                     scrape_state["errors"].append("SERPAPI_KEY not configured")
                 else:
                     for booking in all_bookings:
@@ -447,7 +576,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
                         try:
                             result = search_hotel_prices(
-                                api_key=config.serpapi_key,
+                                api_key=config.serpapi_key.get_secret_value(),
                                 hotel=hotel,
                                 check_in=booking.check_in,
                                 check_out=booking.check_out,
@@ -726,7 +855,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "scheduler.html",
-            {"sched": scheduler.schedule_config, "saved": False, "error": None},
+            {
+                "sched": scheduler.schedule_config,
+                "saved": False,
+                "error": None,
+                "show_test_buttons": config.notifications.show_test_buttons,
+            },
         )
 
     @app.post("/scheduler/config", response_class=HTMLResponse)
@@ -757,7 +891,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "scheduler.html",
-            {"sched": scheduler.schedule_config, "saved": error is None, "error": error},
+            {
+                "sched": scheduler.schedule_config,
+                "saved": error is None,
+                "error": error,
+                "show_test_buttons": config.notifications.show_test_buttons,
+            },
         )
 
     @app.post("/scheduler/start")
@@ -773,6 +912,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
     @app.get("/api/scheduler/status")
     async def scheduler_status():
         cfg = scheduler.schedule_config
+        digest_cfg = config.notifications.email
+        next_digest = None
+        if scheduler.is_active and digest_cfg.digest_enabled:
+            ndt = scheduler._next_digest_time()
+            if ndt:
+                next_digest = ndt.isoformat(timespec="seconds")
         return JSONResponse(
             {
                 "active": scheduler.is_active,
@@ -784,8 +929,122 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "daily_time": cfg.daily_time,
                 "weekly_days": cfg.weekly_days,
                 "weekly_time": cfg.weekly_time,
+                "digest_enabled": digest_cfg.digest_enabled,
+                "digest_time": digest_cfg.digest_time,
+                "last_digest_at": cfg.last_digest_at,
+                "next_digest_at": next_digest,
+                "last_digest_status": cfg.last_digest_status,
+                "last_digest_alerts": cfg.last_digest_alerts,
             }
         )
+
+    @app.post("/api/scheduler/test-digest")
+    async def scheduler_test_digest():
+        """Send a test digest email immediately (ignores timing/enabled checks)."""
+        from ..notifications.email import send_digest_email
+
+        with get_db() as db:
+            alerts = db.get_undigested_alerts()
+
+            if not alerts:
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "error": "No un-digested alerts to include",
+                    },
+                )
+
+            # Generate summary
+            summary = ""
+            with contextlib.suppress(Exception):
+                summary = scheduler._generate_digest_summary(alerts)
+
+            recipients = config.notifications.email.recipients
+            gmail_user = config.gmail_user.get_secret_value()
+            gmail_pass = config.gmail_app_password.get_secret_value()
+
+            if not gmail_user or not gmail_pass:
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "error": "Gmail credentials not configured (set GMAIL_USER and GMAIL_APP_PASSWORD in Config > Secrets)",
+                    },
+                )
+            if not recipients:
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "error": "No email recipients configured (set in Config > Notifications > Recipients)",
+                    },
+                )
+
+            ok = send_digest_email(config, alerts, summary=summary)
+            if ok:
+                # Mark all alerts as digested
+                for a in alerts:
+                    if a.id:
+                        db.mark_alert_notified(a.id, "digest")
+                return JSONResponse(
+                    {"success": True, "alerts": len(alerts), "recipients": recipients}
+                )
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "Email send failed (check server logs for SMTP details)",
+                },
+            )
+
+    @app.post("/api/test-telegram")
+    async def test_telegram():
+        """Send a test Telegram notification with un-notified alerts."""
+        from ..notifications.telegram import _build_messages, send_telegram_message
+
+        token = config.telegram_bot_token.get_secret_value()
+        chat_id = config.telegram_chat_id.get_secret_value()
+        if not token or not chat_id:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "Telegram not configured (set BOT_TOKEN and CHAT_ID in Config > Secrets)",
+                },
+            )
+
+        with get_db() as db:
+            alerts = db.get_unsent_telegram_alerts()
+
+            if not alerts:
+                # No alerts — send a simple test message
+                ok = send_telegram_message(
+                    config,
+                    "🏨 <b>Hotel Price Tracker</b>\n\n✅ Test message — Telegram is working!",
+                )
+                if ok:
+                    return JSONResponse(
+                        {
+                            "success": True,
+                            "alerts": 0,
+                            "message": "Test message sent (no un-notified alerts)",
+                        }
+                    )
+                return JSONResponse(
+                    {"success": False, "error": "Telegram API call failed (check server logs)"}
+                )
+
+            messages = _build_messages(alerts)
+            sent = 0
+            for msg in messages:
+                if send_telegram_message(config, msg):
+                    sent += 1
+
+            if sent == len(messages):
+                # Mark all alerts as notified via Telegram
+                for a in alerts:
+                    if a.id:
+                        db.mark_alert_notified(a.id, "telegram")
+                return JSONResponse({"success": True, "alerts": len(alerts), "messages": sent})
+            return JSONResponse(
+                {"success": False, "error": f"Sent {sent}/{len(messages)} messages — some failed"},
+            )
 
     # ── Check (price comparison) ───────────────────
     @app.get("/check", response_class=HTMLResponse)
@@ -848,9 +1107,20 @@ def create_app(config_path: str | None = None) -> FastAPI:
         alert_upgrade_max_extra_percentage: float = Form(0),
         alert_only_cancellable: str = Form(""),
         notif_telegram: str = Form(""),
-        notif_email: str = Form(""),
+        notif_email_triggered: str = Form(""),
+        notif_email_digest: str = Form(""),
         notif_digest_time: str = Form("08:00"),
+        notif_email_recipients: str = Form(""),
+        notif_show_test_buttons: str = Form(""),
         db_path: str = Form("hotel_tracker.db"),
+        secret_openai_api_key: str = Form(""),
+        secret_gemini_api_key: str = Form(""),
+        secret_anthropic_api_key: str = Form(""),
+        secret_serpapi_key: str = Form(""),
+        secret_telegram_bot_token: str = Form(""),
+        secret_telegram_chat_id: str = Form(""),
+        secret_gmail_user: str = Form(""),
+        secret_gmail_app_password: str = Form(""),
     ):
         nonlocal config
 
@@ -876,21 +1146,45 @@ def create_app(config_path: str | None = None) -> FastAPI:
             config.currency.rates = rates
 
             # Alerts
-            config.alerts.price_drop_min_absolute = alert_price_drop_min_absolute
-            config.alerts.price_drop_min_percentage = alert_price_drop_min_percentage
-            config.alerts.upgrade_max_extra_cost = alert_upgrade_max_extra_cost
-            config.alerts.upgrade_max_extra_percentage = alert_upgrade_max_extra_percentage
+            config.alerts.price_drop.min_absolute = alert_price_drop_min_absolute
+            config.alerts.price_drop.min_percentage = alert_price_drop_min_percentage
+            config.alerts.upgrade.max_extra_cost = alert_upgrade_max_extra_cost
+            config.alerts.upgrade.max_extra_percentage = alert_upgrade_max_extra_percentage
             config.alerts.only_cancellable = alert_only_cancellable == "1"
 
             # Notifications
-            config.notifications.telegram_enabled = notif_telegram == "1"
-            config.notifications.email_enabled = notif_email == "1"
-            config.notifications.email_digest_time = notif_digest_time
+            config.notifications.telegram.enabled = notif_telegram == "1"
+            config.notifications.email.triggered_enabled = notif_email_triggered == "1"
+            config.notifications.email.digest_enabled = notif_email_digest == "1"
+            config.notifications.email.digest_time = notif_digest_time
+            config.notifications.email.recipients = [
+                r.strip() for r in notif_email_recipients.splitlines() if r.strip()
+            ]
+            config.notifications.show_test_buttons = notif_show_test_buttons == "1"
 
             # Database
             config.db_path = db_path
 
+            # Secrets — only update if the user typed a new value (browsers
+            # clear password fields, so empty means "don't change")
+            secrets_changed = False
+            for attr, form_val in [
+                ("openai_api_key", secret_openai_api_key),
+                ("gemini_api_key", secret_gemini_api_key),
+                ("anthropic_api_key", secret_anthropic_api_key),
+                ("serpapi_key", secret_serpapi_key),
+                ("telegram_bot_token", secret_telegram_bot_token),
+                ("telegram_chat_id", secret_telegram_chat_id),
+                ("gmail_user", secret_gmail_user),
+                ("gmail_app_password", secret_gmail_app_password),
+            ]:
+                if form_val:  # non-empty = user typed something
+                    setattr(config, attr, SecretStr(form_val))
+                    secrets_changed = True
+
             save_config(config, config_path)
+            if secrets_changed:
+                save_secrets(config)
         except Exception as e:
             log.exception("Failed to save config")
             error = str(e)
@@ -958,7 +1252,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
         try:
             if provider == "openai":
-                key = config.openai_api_key
+                key = config.openai_api_key.get_secret_value()
                 if not key:
                     return JSONResponse({"error": "No OpenAI API key configured"}, 400)
                 resp = req.get(
@@ -976,7 +1270,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 )
 
             elif provider == "gemini":
-                key = config.gemini_api_key
+                key = config.gemini_api_key.get_secret_value()
                 if not key:
                     return JSONResponse({"error": "No Gemini API key configured"}, 400)
                 resp = req.get(
@@ -992,7 +1286,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 )
 
             elif provider == "anthropic":
-                key = config.anthropic_api_key
+                key = config.anthropic_api_key.get_secret_value()
                 if not key:
                     return JSONResponse({"error": "No Anthropic API key configured"}, 400)
                 resp = req.get(

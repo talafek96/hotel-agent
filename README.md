@@ -11,8 +11,10 @@ A cost-efficient hotel price tracking system that monitors booking prices across
 - **LLM hotel identity verification** — After scraping, verifies that Google's result actually matches your hotel (handles transliterations, naming differences). Caches property tokens for faster subsequent lookups.
 - **SerpAPI retry chain** — 3-step retry for reliability: original params, children counted as adults (Google Hotels limitation), simplified query (hotel name only).
 - **Web dashboard** — FastAPI-based UI with 16 pages: dashboard, hotels, bookings, snapshots, alerts, trends, scrape (with live progress), scrape history, scheduler, config editor, and more.
-- **Telegram notifications** — Severity-based alerts with emoji indicators sent to your phone.
+- **Telegram notifications** — Consolidated alert messages with severity grouping, emoji indicators, and compact vendor listings. All alerts in a single message.
+- **Email notifications** — Two modes: triggered (sends email on each pipeline run) and daily digest (LLM-summarized overview of recent deals). HTML-formatted with alert tables and booking links.
 - **Currency conversion** — Configurable exchange rates for cross-currency price comparison.
+- **Pydantic-settings config** — Type-safe configuration with pydantic models. Secrets auto-loaded from `.env` as `SecretStr` (never leak in logs). Editable from web UI with show/hide toggles.
 - **One-click pipeline** — "Run Now" button on dashboard runs the full scrape→analyze→notify pipeline with live progress and preflight checks.
 - **Configurable scheduler** — Run the pipeline automatically on interval (every N hours/days), daily, or weekly schedules. Persists across server restarts. Dedicated UI with countdown timer.
 - **Parallel execution safety** — Pipeline lock prevents concurrent runs. Manual and scheduled runs cannot overlap.
@@ -147,8 +149,9 @@ hotel-agent/
 │   │   ├── app.py             # FastAPI web dashboard (16 pages)
 │   │   └── templates/         # Jinja2 HTML templates
 │   └── notifications/
-│       └── telegram.py        # Telegram bot alerts
-├── tests/                 # Test suite (337 tests)
+│       ├── telegram.py        # Telegram bot alerts (consolidated)
+│       └── email.py           # Email notifications (triggered + digest)
+├── tests/                 # Test suite
 └── data/                  # Database, screenshots, scheduler state (gitignored)
 ```
 

@@ -42,7 +42,7 @@ def preflight_check(config: AppConfig, db: Database) -> list[str]:
     """Return a list of warning strings. Empty list = all clear."""
     warnings: list[str] = []
 
-    if not config.serpapi_key:
+    if not config.serpapi_key.get_secret_value():
         warnings.append("SERPAPI_KEY not configured — scraping will be skipped.")
 
     bookings = db.get_active_bookings()
@@ -54,8 +54,9 @@ def preflight_check(config: AppConfig, db: Database) -> list[str]:
     if missing_dates:
         warnings.append(f"{missing_dates} booking(s) missing check-in/check-out dates.")
 
-    if config.notifications.telegram_enabled and (
-        not config.telegram_bot_token or not config.telegram_chat_id
+    if config.notifications.telegram.enabled and (
+        not config.telegram_bot_token.get_secret_value()
+        or not config.telegram_chat_id.get_secret_value()
     ):
         warnings.append("Telegram enabled but token/chat_id missing — notifications will fail.")
 
@@ -103,6 +104,7 @@ def run_pipeline(
     from .analysis.comparator import run_analysis
     from .api.serpapi_client import SerpAPIError, search_hotel_prices
     from .llm.hotel_matcher import verify_hotel_match
+    from .notifications.email import notify_alerts_email
     from .notifications.telegram import notify_alerts
 
     result = PipelineResult()
@@ -121,7 +123,7 @@ def run_pipeline(
     # ── Step 2: Scrape ──────────────────────────────────
     _progress("scraping", {"completed": 0, "total": 0})
 
-    if not config.serpapi_key:
+    if not config.serpapi_key.get_secret_value():
         result.errors.append("SERPAPI_KEY not configured — scraping skipped.")
     else:
         with get_db() as db:
@@ -178,7 +180,7 @@ def run_pipeline(
 
                 try:
                     api_result = search_hotel_prices(
-                        api_key=config.serpapi_key,
+                        api_key=config.serpapi_key.get_secret_value(),
                         hotel=hotel,
                         check_in=booking.check_in,
                         check_out=booking.check_out,
@@ -285,11 +287,20 @@ def run_pipeline(
 
     with get_db() as db:
         pending = db.get_pending_alerts()
-        sent = notify_alerts(config, pending)
+
+        # Telegram
+        tg_sent = notify_alerts(config, pending)
         for a in pending:
             if a.id and not a.notified_telegram:
                 db.mark_alert_notified(a.id, "telegram")
-        result.notifications_sent = sent
+
+        # Email (triggered)
+        em_sent = notify_alerts_email(config, pending)
+        for a in pending:
+            if a.id and not a.notified_email:
+                db.mark_alert_notified(a.id, "email")
+
+        result.notifications_sent = tg_sent + em_sent
 
     _progress(
         "done",

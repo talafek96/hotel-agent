@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     details TEXT DEFAULT '[]',
     notified_telegram INTEGER NOT NULL DEFAULT 0,
     notified_email INTEGER NOT NULL DEFAULT 0,
+    notified_digest INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -176,6 +177,13 @@ class Database:
         booking_cols = {row[1] for row in cursor.fetchall()}
         if "booking_url" not in booking_cols:
             self.conn.execute("ALTER TABLE bookings ADD COLUMN booking_url TEXT DEFAULT ''")
+
+        cursor = self.conn.execute("PRAGMA table_info(alerts)")
+        alert_cols = {row[1] for row in cursor.fetchall()}
+        if "notified_digest" not in alert_cols:
+            self.conn.execute(
+                "ALTER TABLE alerts ADD COLUMN notified_digest INTEGER NOT NULL DEFAULT 0"
+            )
 
     def close(self):
         self.conn.close()
@@ -629,8 +637,40 @@ class Database:
         ).fetchall()
         return [self._row_to_alert(r) for r in rows]
 
+    def get_recent_alerts(self, limit: int = 100) -> list[Alert]:
+        """Get the most recent alerts regardless of notification status."""
+        rows = self.conn.execute(
+            "SELECT * FROM alerts ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [self._row_to_alert(r) for r in rows]
+
+    def get_alerts_since(self, since_iso: str) -> list[Alert]:
+        """Get all alerts created since the given ISO datetime string."""
+        rows = self.conn.execute(
+            """SELECT * FROM alerts
+               WHERE created_at >= ?
+               ORDER BY created_at DESC""",
+            (since_iso,),
+        ).fetchall()
+        return [self._row_to_alert(r) for r in rows]
+
+    def get_undigested_alerts(self) -> list[Alert]:
+        """Get alerts that haven't been included in a digest email yet."""
+        rows = self.conn.execute(
+            "SELECT * FROM alerts WHERE notified_digest=0 ORDER BY created_at DESC"
+        ).fetchall()
+        return [self._row_to_alert(r) for r in rows]
+
+    def get_unsent_telegram_alerts(self) -> list[Alert]:
+        """Get alerts that haven't been sent via Telegram yet."""
+        rows = self.conn.execute(
+            "SELECT * FROM alerts WHERE notified_telegram=0 ORDER BY created_at DESC"
+        ).fetchall()
+        return [self._row_to_alert(r) for r in rows]
+
     def mark_alert_notified(self, alert_id: int, channel: str):
-        _VALID_CHANNELS = {"telegram", "email"}
+        _VALID_CHANNELS = {"telegram", "email", "digest"}
         if channel not in _VALID_CHANNELS:
             raise ValueError(f"Invalid channel '{channel}', must be one of {_VALID_CHANNELS}")
         col = f"notified_{channel}"
@@ -652,6 +692,7 @@ class Database:
             details=json.loads(r["details"] or "[]"),
             notified_telegram=bool(r["notified_telegram"]),
             notified_email=bool(r["notified_email"]),
+            notified_digest=bool(r["notified_digest"]),
             created_at=parse_datetime(r["created_at"]),
         )
 

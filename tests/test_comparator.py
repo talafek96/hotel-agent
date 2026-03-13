@@ -11,7 +11,13 @@ from hotel_agent.analysis.comparator import (
     compare_booking_to_snapshots,
     run_analysis,
 )
-from hotel_agent.config import AlertThresholds, AppConfig, CurrencyConfig
+from hotel_agent.config import (
+    AlertThresholds,
+    AppConfig,
+    CurrencyConfig,
+    PriceDropThresholds,
+    UpgradeThresholds,
+)
 from hotel_agent.models import Booking, Hotel, PriceSnapshot, TravelerComposition
 
 # ── Helpers ────────────────────────────────────────────────
@@ -65,16 +71,14 @@ def _make_hotel(**kwargs):
 
 
 def _make_config(**kwargs):
-    cfg = AppConfig()
+    cfg = AppConfig(_env_file=None)
     cfg.currency = CurrencyConfig(
         base="ILS",
         rates={"JPY_to_ILS": 0.0196008, "USD_to_ILS": 3.0912},
     )
     cfg.alerts = AlertThresholds(
-        price_drop_min_absolute=10.0,
-        price_drop_min_percentage=5.0,
-        upgrade_max_extra_cost=50.0,
-        upgrade_max_extra_percentage=10.0,
+        price_drop=PriceDropThresholds(min_absolute=10.0, min_percentage=5.0),
+        upgrade=UpgradeThresholds(max_extra_cost=50.0, max_extra_percentage=10.0),
     )
     for k, v in kwargs.items():
         setattr(cfg, k, v)
