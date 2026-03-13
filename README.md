@@ -4,12 +4,17 @@ A cost-efficient hotel price tracking system that monitors booking prices across
 
 ## Features
 
-- **LLM-powered Excel import** — Reads your hotel bookings from any Excel format using AI. No rigid column requirements.
+- **LLM-powered Excel import** — Reads hotel bookings from any Excel format using AI. No rigid column requirements.
 - **SerpAPI hotel price fetching** — Queries Google Hotels via SerpAPI to get prices from Booking.com, Agoda, Expedia, and more in a single API call. No browser scraping, no CAPTCHAs.
-- **Smart price alerts** — Detects price drops, upgrade opportunities, and new cancellable options using configurable rule-based logic.
-- **Multi-provider LLM support** — Switch between OpenAI, Google Gemini, and Anthropic Claude via config.
-- **Web dashboard** — FastAPI-based dashboard for managing hotels, bookings, snapshots, and alerts.
-- **Telegram & Email notifications** — Get instant alerts on your phone or daily email digests.
+- **Smart price alerts** — Detects price drops and upgrade opportunities (cancellable rooms, breakfast, etc.) using configurable rule-based logic.
+- **Multi-provider LLM support** — Switch between OpenAI, Google Gemini, and Anthropic Claude via config. Uses [litellm](https://github.com/BerriAI/litellm) as abstraction layer.
+- **LLM hotel identity verification** — After scraping, verifies that Google's result actually matches your hotel (handles transliterations, naming differences). Caches property tokens for faster subsequent lookups.
+- **SerpAPI retry chain** — 3-step retry for reliability: original params, children counted as adults (Google Hotels limitation), simplified query (hotel name only).
+- **Web dashboard** — FastAPI-based UI with 14 pages: dashboard, hotels, bookings, snapshots, alerts, trends, scrape (with live progress), scrape history, config editor, and more.
+- **Telegram notifications** — Severity-based alerts with emoji indicators sent to your phone.
+- **Currency conversion** — Configurable exchange rates for cross-currency price comparison.
+- **Background scraping** — Scrape runs in a background thread with live progress polling via the web UI.
+- **CI pipeline** — GitHub Actions with linting (ruff), type checking (mypy), and tests (pytest).
 - **Minimal cost** — SerpAPI free tier: 250 searches/month. LLM extraction costs ~$1-5/month.
 
 ## Quick Start
@@ -26,24 +31,27 @@ A cost-efficient hotel price tracking system that monitors booking prices across
 ```bash
 git clone <repo-url>
 cd hotel-agent
-
-# Install dependencies
-python -m uv sync
+uv sync
 ```
 
 ### Configuration
 
-1. Copy the example env file and add your API key:
+1. Copy the example files:
 ```bash
 cp .env.example .env
-# Edit .env and set your LLM API key
+cp config.example.yaml config.yaml
 ```
 
-2. Edit `config.yaml` to set your preferences:
+2. Edit `.env` and set your API keys:
+   - At least one LLM key (`OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY`)
+   - `SERPAPI_KEY` for price fetching
+   - `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` for notifications (optional)
+
+3. Edit `config.yaml` to set your preferences:
    - Traveler composition (adults, children ages)
    - LLM provider and model
-   - Currency settings
-   - Alert thresholds
+   - Base currency and exchange rates (e.g. `JPY_to_USD: 0.0067`)
+   - Alert thresholds (minimum savings, upgrade cost limits)
    - Notification preferences
 
 ### Usage
@@ -51,9 +59,13 @@ cp .env.example .env
 ```bash
 # Import bookings from Excel
 hotel-agent import "data/hotels.xlsx" --sheet "Sheet1" --table "Hotels"
+hotel-agent import "data/hotels.xlsx" --dry-run   # Preview without saving
 
-# Check what was imported
-hotel-agent bookings
+# View data
+hotel-agent hotels        # List tracked hotels
+hotel-agent bookings      # List active bookings
+hotel-agent snapshots     # View scraped price snapshots
+hotel-agent snapshot 42   # Detailed view of a single snapshot
 
 # Scrape current prices (via SerpAPI)
 hotel-agent scrape
@@ -66,12 +78,16 @@ hotel-agent run
 
 # View system status
 hotel-agent status
+
+# Batch-update all bookings to use config travelers
+hotel-agent fix-travelers
+
+# Start the web dashboard
+hotel-agent serve              # http://localhost:8000
+hotel-agent serve --port 3000  # Custom port
 ```
 
-On Windows, prefix commands with `PYTHONIOENCODING=utf-8` for proper Unicode support:
-```bash
-PYTHONIOENCODING=utf-8 hotel-agent import "data/hotels.xlsx" -s "Sheet1" -t "Hotels"
-```
+All commands accept `--config / -c` to specify a config file (defaults to `config.yaml`).
 
 ## Architecture
 
@@ -82,13 +98,13 @@ Excel File (any format)
 SQLite Database
     |
     v  For each booking:
-SerpAPI Google Hotels -> Price Snapshots (multi-OTA)
+SerpAPI Google Hotels -> LLM verifies hotel match -> Price Snapshots (multi-OTA)
     |
-    v  Rule engine compares
-Alerts -> Telegram / Email
+    v  Rule engine compares (deterministic, no LLM)
+Alerts -> Telegram
 ```
 
-- **LLM is used for**: Excel parsing (any format)
+- **LLM is used for**: Excel parsing (any format), hotel identity verification
 - **SerpAPI is used for**: Hotel price data from multiple OTAs in one call
 - **LLM is NOT used for**: Price comparisons, alert rules, notifications (all deterministic)
 
@@ -96,47 +112,51 @@ Alerts -> Telegram / Email
 
 ```
 hotel-agent/
+├── .env.example           # API keys template
+├── .github/workflows/     # CI pipeline (ruff, mypy, pytest)
 ├── AGENTS.md              # Development rules
-├── config.yaml            # User configuration
+├── config.example.yaml    # Config template
 ├── pyproject.toml         # Project & tool config
 ├── src/hotel_agent/
 │   ├── cli.py             # CLI commands (typer)
-│   ├── config.py          # Config loading
+│   ├── config.py          # Config loading & currency conversion
 │   ├── db.py              # SQLite database
 │   ├── models.py          # Data models
+│   ├── utils.py           # Platform URLs, date parsing helpers
 │   ├── api/
-│   │   └── serpapi_client.py # SerpAPI Google Hotels client
+│   │   └── serpapi_client.py  # SerpAPI client with retry chain
 │   ├── llm/
-│   │   ├── client.py      # Multi-provider LLM client
-│   │   └── excel_parser.py # LLM-based Excel parsing
+│   │   ├── client.py          # Multi-provider LLM client (litellm)
+│   │   ├── excel_parser.py    # LLM-based Excel parsing
+│   │   └── hotel_matcher.py   # LLM hotel identity verification
 │   ├── analysis/
-│   │   └── comparator.py  # Price comparison rules
+│   │   └── comparator.py      # Price comparison rules
 │   ├── web/
-│   │   ├── app.py         # FastAPI web dashboard
-│   │   └── templates/     # Jinja2 HTML templates
+│   │   ├── app.py             # FastAPI web dashboard (14 pages)
+│   │   └── templates/         # Jinja2 HTML templates
 │   └── notifications/
-│       └── telegram.py    # Telegram bot alerts
-├── tests/                 # Test suite
-└── data/                  # Database (gitignored)
+│       └── telegram.py        # Telegram bot alerts
+├── tests/                 # Test suite (274 tests)
+└── data/                  # Database & screenshots (gitignored)
 ```
 
 ## Development
 
 ```bash
 # Install with dev tools
-python -m uv sync --group dev
+uv sync --group dev
 
 # Run linter
-python -m uv run ruff check src/ tests/
+uv run ruff check src/ tests/
 
 # Run type checker
-python -m uv run mypy src/hotel_agent/
+uv run mypy src/hotel_agent/
 
 # Run tests
-python -m uv run pytest
+uv run pytest
 
 # Auto-format code
-python -m uv run ruff format src/ tests/
+uv run ruff format src/ tests/
 ```
 
 ## License

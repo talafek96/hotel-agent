@@ -15,9 +15,10 @@ python -m uv run pytest
 - Rule-based logic for comparisons/alerts — do NOT use LLM where deterministic rules suffice.
 - Keep AGENTS.md files short. Only document things not obvious from reading the code.
 - Update this file when the user corrects you about something.
+- Update README.md when adding new features, commands, config options, or setup changes.
 
 ## User Preferences
 - Cares about: low cost, reliability, easy maintenance, clear alerts.
 - Does NOT want: fancy UI, over-engineered frameworks, AI for AI's sake.
 - Wants to switch between LLM providers easily.
-- Update README.md when adding features or changing setup.
+- Commit messages: concise summary line, bullet-point body. No paragraphs. Never mention Devin or Co-Authored-By.
