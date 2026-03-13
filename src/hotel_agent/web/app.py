@@ -8,6 +8,7 @@ import os
 import shutil
 import tempfile
 import threading
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -603,6 +604,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         "warnings": [],
         "errors": [],
         "source": "",  # "manual" | "scheduler"
+        "finished_at": "",
     }
 
     def _pipeline_progress(step: str, detail: dict) -> None:
@@ -634,6 +636,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         finally:
             pipeline_state["running"] = False
             pipeline_state["step"] = "done"
+            pipeline_state["finished_at"] = datetime.now().isoformat(timespec="seconds")
             pipeline_lock.release()
 
     @app.get("/api/pipeline/preflight")
@@ -680,6 +683,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "warnings": pipeline_state["warnings"],
                 "errors": pipeline_state["errors"],
                 "source": pipeline_state["source"],
+                "finished_at": pipeline_state["finished_at"],
             }
         )
 
@@ -707,9 +711,11 @@ def create_app(config_path: str | None = None) -> FastAPI:
         pipeline_state["running"] = False
         pipeline_state["step"] = "done"
         pipeline_state["result"] = summary
+        pipeline_state["finished_at"] = datetime.now().isoformat(timespec="seconds")
 
     scheduler._on_run_start = _sched_run_start
     scheduler._on_run_end = _sched_run_end
+    scheduler._on_progress = _pipeline_progress
 
     # Auto-resume if scheduler was active before shutdown
     if scheduler.schedule_config.active:

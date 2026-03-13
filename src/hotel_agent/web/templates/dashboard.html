@@ -240,20 +240,24 @@
         }
     }
 
-    function showResult(r) {
+    function showResult(r, source, finishedAt) {
         resultEl.style.display = 'flex';
+        var sourceTag = source ? '<div class="pipe-result-item" style="font-size:.75rem;"><div class="num" style="font-size:1rem;">' + (source === 'scheduler' ? '&#9200;' : '&#9654;') + '</div><div class="lbl">' + source + '</div></div>' : '';
+        var timeTag = finishedAt ? '<div class="pipe-result-item" style="font-size:.75rem;"><div class="num" style="font-size:.85rem;">' + finishedAt.replace('T',' ') + '</div><div class="lbl">Completed</div></div>' : '';
         resultEl.innerHTML =
             '<div class="pipe-result-item"><div class="num">' + r.scrape_success + '/' + r.scrape_total + '</div><div class="lbl">Hotels Scraped</div></div>' +
             '<div class="pipe-result-item"><div class="num">' + r.new_alerts + '</div><div class="lbl">New Alerts</div></div>' +
             '<div class="pipe-result-item"><div class="num">' + r.notifications_sent + '</div><div class="lbl">Notifications</div></div>' +
-            (r.scrape_failed > 0 ? '<div class="pipe-result-item" style="border:1px solid rgba(239,68,68,.3);"><div class="num" style="color:#fca5a5;">' + r.scrape_failed + '</div><div class="lbl">Failed</div></div>' : '');
+            (r.scrape_failed > 0 ? '<div class="pipe-result-item" style="border:1px solid rgba(239,68,68,.3);"><div class="num" style="color:#fca5a5;">' + r.scrape_failed + '</div><div class="lbl">Failed</div></div>' : '') +
+            sourceTag + timeTag;
     }
 
     function pollStatus() {
         fetch('/api/pipeline/status').then(function(r){return r.json()}).then(function(data) {
             if (data.running) {
                 btn.disabled = true;
-                btn.textContent = 'Running...';
+                var srcLabel = data.source === 'scheduler' ? 'Scheduler running...' : 'Running...';
+                btn.textContent = srcLabel;
                 btn.className = 'pipe-btn running';
                 card.style.animation = 'pipelinePulse 2s infinite';
                 setSteps(data.step);
@@ -268,6 +272,9 @@
                 } else {
                     progressEl.style.display = 'none';
                 }
+
+                // Keep polling
+                if (!polling) polling = setInterval(pollStatus, 1200);
             } else if (data.step === 'done') {
                 clearInterval(polling); polling = null;
                 btn.disabled = false;
@@ -277,7 +284,7 @@
                 setSteps('done');
                 progressEl.style.display = 'none';
 
-                if (data.result) showResult(data.result);
+                if (data.result) showResult(data.result, data.source, data.finished_at);
                 if (data.errors && data.errors.length) {
                     errorsEl.innerHTML = data.errors.map(function(e) {
                         return '<div class="pipe-err">' + e + '</div>';
@@ -286,6 +293,7 @@
                     errorsEl.innerHTML = '';
                 }
             } else {
+                // No run has happened yet — idle state
                 btn.disabled = false;
                 btn.textContent = 'Run Now';
                 btn.className = 'pipe-btn';
@@ -322,11 +330,6 @@
             pollStatus();
         });
     });
-
-    // Auto-resume polling
-    fetch('/api/pipeline/status').then(function(r){return r.json()}).then(function(data) {
-        if (data.running && !polling) polling = setInterval(pollStatus, 1200);
-    });
 })();
 </script>
 
@@ -351,37 +354,56 @@
 </div>
 <script>
 (function() {
-    fetch('/api/scheduler/status').then(function(r){return r.json()}).then(function(data) {
-        var pill = document.getElementById('sched-pill');
-        var pillText = document.getElementById('sched-pill-text');
-        var dot = pill.querySelector('.dot');
-        var countdown = document.getElementById('sched-countdown');
+    var pill = document.getElementById('sched-pill');
+    var pillText = document.getElementById('sched-pill-text');
+    var dot = pill.querySelector('.dot');
+    var countdown = document.getElementById('sched-countdown');
+    var tickInterval = null;
 
-        if (data.active) {
-            pill.className = 'sched-status-pill active';
-            pillText.textContent = 'Active';
-            dot.style.display = '';
-            if (data.next_run_at) {
-                var next = new Date(data.next_run_at);
-                function tick() {
-                    var diff = Math.max(0, Math.floor((next - new Date()) / 1000));
-                    if (diff <= 0) { countdown.innerHTML = 'Next run <strong>imminent</strong>'; return; }
-                    var h = Math.floor(diff/3600), m = Math.floor((diff%3600)/60), s = diff%60;
-                    var parts = [];
-                    if (h) parts.push(h+'h');
-                    if (m) parts.push(m+'m');
-                    parts.push(s+'s');
-                    countdown.innerHTML = 'Next run in <strong>' + parts.join(' ') + '</strong>';
-                }
-                tick(); setInterval(tick, 1000);
+    function updateScheduler() {
+        fetch('/api/scheduler/status').then(function(r){return r.json()}).then(function(sched) {
+            if (!sched.active) {
+                pill.className = 'sched-status-pill paused';
+                pillText.textContent = 'Paused';
+                dot.style.display = 'none';
+                countdown.innerHTML = '<span style="color:rgba(255,255,255,.5);">Not scheduled</span>';
+                return;
             }
-        } else {
-            pill.className = 'sched-status-pill paused';
-            pillText.textContent = 'Paused';
-            dot.style.display = 'none';
-            countdown.innerHTML = '<span style="color:rgba(255,255,255,.5);">Not scheduled</span>';
-        }
-    });
+
+            // Scheduler is active — check if pipeline is currently running
+            fetch('/api/pipeline/status').then(function(r){return r.json()}).then(function(pipe) {
+                if (pipe.running && pipe.source === 'scheduler') {
+                    pill.className = 'sched-status-pill active';
+                    pillText.textContent = 'Running';
+                    dot.style.display = '';
+                    var stepLabel = pipe.step || 'starting';
+                    var stepLabels = {'starting':'Starting...','preflight':'Preflight...','scraping':'Scraping...','analyzing':'Analyzing...','notifying':'Notifying...'};
+                    countdown.innerHTML = '<strong style="color:#6ee7b7;">' + (stepLabels[stepLabel]||stepLabel) + '</strong>';
+                } else {
+                    pill.className = 'sched-status-pill active';
+                    pillText.textContent = 'Active';
+                    dot.style.display = '';
+                    if (sched.next_run_at) {
+                        var next = new Date(sched.next_run_at);
+                        var diff = Math.max(0, Math.floor((next - new Date()) / 1000));
+                        if (diff <= 0) {
+                            countdown.innerHTML = 'Next run <strong>imminent</strong>';
+                        } else {
+                            var h = Math.floor(diff/3600), m = Math.floor((diff%3600)/60), s = diff%60;
+                            var parts = [];
+                            if (h) parts.push(h+'h');
+                            if (m) parts.push(m+'m');
+                            parts.push(s+'s');
+                            countdown.innerHTML = 'Next run in <strong>' + parts.join(' ') + '</strong>';
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    updateScheduler();
+    setInterval(updateScheduler, 2000);
 })();
 </script>
 

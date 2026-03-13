@@ -303,17 +303,73 @@ function toggleDay(el) {
     if (checked) selectMode(checked.value);
 })();
 
-// Countdown timer
+// Countdown timer + pipeline status polling
 {% if sched.active and sched.next_run_at %}
 (function() {
     var target = new Date('{{ sched.next_run_at }}');
     var hEl = document.getElementById('cd-hours');
     var mEl = document.getElementById('cd-minutes');
     var sEl = document.getElementById('cd-seconds');
+    var box = document.getElementById('countdown-box');
+    var pipelineRunning = false;
+    var tickId = null;
 
     function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
+    function showPipelineStatus() {
+        fetch('/api/pipeline/status').then(function(r){return r.json()}).then(function(data) {
+            if (data.running && data.source === 'scheduler') {
+                pipelineRunning = true;
+                var stepLabels = {
+                    'starting':'Starting pipeline...',
+                    'preflight':'Running preflight checks...',
+                    'scraping':'Scraping hotel prices...',
+                    'analyzing':'Analyzing prices...',
+                    'notifying':'Sending notifications...'
+                };
+                var label = stepLabels[data.step] || 'Running pipeline...';
+
+                var progressHtml = '<div style="text-align:center; width:100%;">';
+                progressHtml += '<div style="font-size:1.3rem; font-weight:800; color:#6ee7b7; margin-bottom:.5rem;">' + label + '</div>';
+
+                // Step dots
+                var steps = ['preflight','scraping','analyzing','notifying','done'];
+                progressHtml += '<div style="display:flex; justify-content:center; gap:.5rem; margin-bottom:.75rem;">';
+                for (var i = 0; i < steps.length; i++) {
+                    var isCurrent = steps[i] === data.step;
+                    var isDone = steps.indexOf(data.step) > i;
+                    var color = isDone ? '#34d399' : (isCurrent ? '#fbbf24' : 'rgba(255,255,255,.2)');
+                    var size = isCurrent ? '12px' : '8px';
+                    progressHtml += '<span style="width:'+size+';height:'+size+';border-radius:50%;background:'+color+';display:inline-block;transition:all .3s;"></span>';
+                }
+                progressHtml += '</div>';
+
+                // Progress bar if scraping
+                if (data.step === 'scraping' && data.detail && data.detail.total > 0) {
+                    var pct = Math.round((data.detail.completed / data.detail.total) * 100);
+                    progressHtml += '<div style="background:rgba(255,255,255,.15);border-radius:999px;height:8px;overflow:hidden;max-width:400px;margin:0 auto .4rem;">';
+                    progressHtml += '<div style="height:100%;border-radius:999px;width:'+pct+'%;background:linear-gradient(90deg,#34d399,#fbbf24);transition:width .4s;"></div>';
+                    progressHtml += '</div>';
+                    progressHtml += '<div style="font-size:.8rem;color:rgba(255,255,255,.6);">';
+                    progressHtml += data.detail.completed + '/' + data.detail.total;
+                    if (data.detail.current_hotel) progressHtml += ' — ' + data.detail.current_hotel;
+                    progressHtml += '</div>';
+                }
+
+                progressHtml += '</div>';
+                box.innerHTML = progressHtml;
+                box.style.display = 'flex';
+            } else if (pipelineRunning && !data.running) {
+                // Pipeline just finished — show result briefly then reload for new countdown
+                pipelineRunning = false;
+                box.innerHTML = '<div style="text-align:center;width:100%;"><div style="font-size:1.3rem;font-weight:800;color:#34d399;">Pipeline complete!</div><div style="font-size:.8rem;color:rgba(255,255,255,.6);margin-top:.25rem;">Reloading...</div></div>';
+                setTimeout(function(){ location.reload(); }, 2000);
+            }
+        });
+    }
+
     function tick() {
+        if (pipelineRunning) return; // Don't update countdown while pipeline is running
         var diff = Math.max(0, Math.floor((target - new Date()) / 1000));
         var h = Math.floor(diff / 3600);
         var m = Math.floor((diff % 3600) / 60);
@@ -322,13 +378,17 @@ function toggleDay(el) {
         mEl.textContent = pad(m);
         sEl.textContent = pad(s);
         if (diff <= 0) {
-            hEl.textContent = '00';
-            mEl.textContent = '00';
-            sEl.textContent = '00';
+            // Timer expired — start polling for pipeline status
+            showPipelineStatus();
         }
     }
+
     tick();
     setInterval(tick, 1000);
+    // Also poll pipeline status periodically to catch scheduler runs
+    setInterval(showPipelineStatus, 2000);
+    // Check immediately in case pipeline is already running
+    showPipelineStatus();
 })();
 {% endif %}
 </script>

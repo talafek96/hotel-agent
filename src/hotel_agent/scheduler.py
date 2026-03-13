@@ -142,6 +142,7 @@ class Scheduler:
         self._stop_event = threading.Event()
         self._on_run_start: Callable[[], None] | None = None
         self._on_run_end: Callable[[dict], None] | None = None
+        self._on_progress: Callable[[str, dict], None] | None = None
         self.load_state()
 
     # ── State persistence ───────────────────────────
@@ -269,6 +270,7 @@ class Scheduler:
                 result = run_pipeline(
                     self._app_config,
                     self._get_db,
+                    on_progress=self._on_progress,
                 )
 
                 self._sched.last_run_at = datetime.now().isoformat()
