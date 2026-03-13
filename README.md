@@ -1,6 +1,6 @@
 # Hotel Price Tracker
 
-A cost-efficient hotel price tracking system that monitors booking prices across platforms and alerts you to savings opportunities.
+A cost-efficient hotel price tracking system that monitors booking prices across platforms and alerts you to savings opportunities scheduler based.
 
 ## Features
 
