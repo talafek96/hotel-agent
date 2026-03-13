@@ -381,14 +381,13 @@ class Scheduler:
             self._sched.last_digest_at or "never",
         )
 
-        # Get alerts since last digest
-        since = self._sched.last_digest_at or (now - timedelta(days=1)).isoformat()
+        # Get alerts that haven't been digested yet
         try:
             with self._get_db() as db:
-                alerts = db.get_alerts_since(since)
+                alerts = db.get_undigested_alerts()
 
             if not alerts:
-                log.info("Scheduler: no alerts since last digest, skipping")
+                log.info("Scheduler: no undigested alerts, skipping")
                 self._sched.last_digest_at = now.isoformat()
                 self._sched.last_digest_status = "skipped: no new alerts"
                 self._sched.last_digest_alerts = 0
@@ -404,6 +403,11 @@ class Scheduler:
                 log.info("Scheduler: digest email sent with %d alerts", len(alerts))
                 self._sched.last_digest_status = f"sent ({len(alerts)} alerts)"
                 self._sched.last_digest_alerts = len(alerts)
+                # Mark all included alerts as digested
+                with self._get_db() as db:
+                    for a in alerts:
+                        if a.id:
+                            db.mark_alert_notified(a.id, "digest")
             else:
                 log.warning("Scheduler: digest email failed")
                 self._sched.last_digest_status = (

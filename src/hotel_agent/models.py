@@ -152,6 +152,7 @@ class Alert:
     details: list[dict] = field(default_factory=list)
     notified_telegram: bool = False
     notified_email: bool = False
+    notified_digest: bool = False
     created_at: datetime | None = None
 
 

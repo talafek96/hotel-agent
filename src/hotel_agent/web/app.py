@@ -49,7 +49,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
     async def dashboard(request: Request):
         with get_db() as db:
             stats = db.get_stats()
-            alerts = db.get_pending_alerts()
+            alerts = db.get_recent_alerts(limit=10)
             bookings = db.get_active_bookings()
             # Enrich bookings with hotel names
             booking_data = []
@@ -71,7 +71,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
             "dashboard.html",
             {
                 "stats": stats,
-                "alerts": alerts[:10],
+                "alerts": alerts,
                 "bookings": booking_data[:10],
             },
         )
@@ -396,7 +396,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
     @app.get("/alerts", response_class=HTMLResponse)
     async def alerts_page(request: Request):
         with get_db() as db:
-            alerts = db.get_pending_alerts()
+            alerts = db.get_recent_alerts(limit=200)
             alert_data = []
             for a in alerts:
                 hotel = None
@@ -934,17 +934,16 @@ def create_app(config_path: str | None = None) -> FastAPI:
         from ..notifications.email import send_digest_email
 
         with get_db() as db:
-            # Get alerts from last 7 days for testing
-            from datetime import datetime, timedelta
-
-            since = (datetime.now() - timedelta(days=7)).isoformat()
-            alerts = db.get_alerts_since(since)
+            alerts = db.get_undigested_alerts()
+            # Fall back to recent alerts if all have been digested (for testing)
+            if not alerts:
+                alerts = db.get_recent_alerts(limit=20)
 
         if not alerts:
             return JSONResponse(
                 {
                     "success": False,
-                    "error": "No alerts in the last 7 days to include in test digest",
+                    "error": "No alerts found to include in test digest",
                 },
             )
 
