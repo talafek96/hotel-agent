@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import sys
 from pathlib import Path
@@ -29,16 +28,9 @@ console = Console(force_terminal=True)
 
 
 def _setup_logging(verbose: bool = False):
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
-    )
-    # Quiet noisy libraries
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("litellm").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
+    from .logging_setup import setup_logging
+
+    setup_logging(verbose=verbose)
 
 
 @app.command(name="import")

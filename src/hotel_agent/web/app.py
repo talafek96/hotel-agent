@@ -29,6 +29,10 @@ TEMPLATE_DIR = Path(__file__).parent / "templates"
 
 def create_app(config_path: str | None = None) -> FastAPI:
     """Create and configure the FastAPI application."""
+    from ..logging_setup import setup_logging
+
+    setup_logging()
+
     if config_path is None:
         config_path = os.environ.get("HOTEL_AGENT_CONFIG", "config.yaml")
     app = FastAPI(title="Hotel Price Tracker")
