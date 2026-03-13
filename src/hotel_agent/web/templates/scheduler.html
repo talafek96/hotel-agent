@@ -3,62 +3,239 @@
 {% block topbar_title %}Scheduler{% endblock %}
 {% block content %}
 
-<!-- Status card -->
-<div class="card" style="border-left:4px solid #f59e0b; padding:1rem 1.25rem;">
-    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
-        <strong>Status</strong>
-        <span id="sched-badge" class="badge {% if sched.active %}badge-green{% else %}badge-yellow{% endif %}">
-            {{ "Active" if sched.active else "Paused" }}
-        </span>
-        {% if sched.next_run_at and sched.active %}
-        <span id="sched-next" style="color:#64748b; font-size:.8125rem;">
-            Next run: <span id="next-run-time">{{ sched.next_run_at[:19] }}</span>
-            <span id="next-run-countdown" style="margin-left:.5rem;"></span>
-        </span>
-        {% endif %}
-        {% if sched.last_run_at %}
-        <span style="color:#64748b; font-size:.8125rem;">
-            Last: {{ sched.last_run_at[:19] }}
-        </span>
-        {% endif %}
-        <div style="margin-left:auto; display:flex; gap:0.5rem;">
+<style>
+@keyframes fadeInUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+@keyframes countdownGlow { 0%,100%{text-shadow:0 0 0 transparent} 50%{text-shadow:0 0 12px rgba(251,191,36,.4)} }
+
+/* Hero status banner */
+.sched-hero {
+    background: linear-gradient(135deg, #78350f 0%, #92400e 40%, #b45309 100%);
+    border-radius:.75rem; padding:2rem; color:#fff; position:relative; overflow:hidden;
+    margin-bottom:1.5rem; animation:fadeInUp .4s ease-out;
+}
+.sched-hero::before {
+    content:''; position:absolute; top:-30px; right:-30px; width:200px; height:200px;
+    background:radial-gradient(circle, rgba(251,191,36,.12) 0%, transparent 70%);
+    border-radius:50%; pointer-events:none;
+}
+.sched-hero-inner { position:relative; z-index:1; }
+
+.sched-hero-top { display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap; }
+.sched-hero-icon { font-size:2.5rem; line-height:1; }
+.sched-hero-title { font-size:1.5rem; font-weight:800; }
+
+.sched-pill {
+    display:inline-flex; align-items:center; gap:.4rem;
+    padding:.35rem 1rem; border-radius:999px; font-size:.8rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:.05em;
+}
+.sched-pill-active { background:rgba(52,211,153,.2); color:#6ee7b7; border:1px solid rgba(52,211,153,.35); }
+.sched-pill-paused { background:rgba(251,191,36,.15); color:#fde68a; border:1px solid rgba(251,191,36,.3); }
+.sched-pill .dot {
+    width:9px; height:9px; border-radius:50%; background:#34d399;
+    animation:pulse 1.5s infinite;
+}
+
+.sched-hero-actions { margin-left:auto; }
+.sched-hero-btn {
+    padding:.65rem 1.5rem; font-size:.9rem; font-weight:700; border:none; border-radius:.5rem;
+    cursor:pointer; transition:all .2s; text-transform:uppercase; letter-spacing:.04em;
+}
+.sched-start-btn { background:#34d399; color:#064e3b; box-shadow:0 4px 14px rgba(52,211,153,.3); }
+.sched-start-btn:hover { background:#6ee7b7; transform:translateY(-1px); }
+.sched-stop-btn { background:rgba(239,68,68,.8); color:#fff; box-shadow:0 4px 14px rgba(239,68,68,.25); }
+.sched-stop-btn:hover { background:#ef4444; transform:translateY(-1px); }
+
+/* Countdown display */
+.sched-countdown-box {
+    display:flex; gap:1.5rem; margin-top:1.5rem; justify-content:center;
+    animation:fadeInUp .4s ease-out .15s both;
+}
+.sched-countdown-unit {
+    text-align:center; min-width:72px;
+}
+.sched-countdown-num {
+    font-size:2.2rem; font-weight:900; color:#fde68a; line-height:1;
+    font-variant-numeric:tabular-nums;
+    animation:countdownGlow 3s infinite;
+}
+.sched-countdown-label {
+    font-size:.65rem; text-transform:uppercase; letter-spacing:.06em;
+    color:rgba(255,255,255,.5); margin-top:.25rem;
+}
+
+.sched-meta-row {
+    display:flex; gap:2rem; margin-top:1.25rem; flex-wrap:wrap;
+    font-size:.8rem; color:rgba(255,255,255,.6);
+}
+.sched-meta-row strong { color:rgba(255,255,255,.85); }
+
+/* Mode selector cards */
+.mode-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:1rem; margin-bottom:1.25rem; }
+.mode-card {
+    border:2px solid #e2e8f0; border-radius:.625rem; padding:1.25rem; cursor:pointer;
+    transition:all .2s; text-align:center; position:relative;
+}
+.mode-card:hover { border-color:#3b82f6; background:#f0f7ff; }
+.mode-card.selected { border-color:#f59e0b; background:#fffbeb; box-shadow:0 0 0 3px rgba(245,158,11,.15); }
+.mode-card-icon { font-size:1.75rem; margin-bottom:.5rem; }
+.mode-card-name { font-weight:700; font-size:.9rem; color:#1e293b; }
+.mode-card-desc { font-size:.75rem; color:#64748b; margin-top:.25rem; }
+.mode-card input[type="radio"] { position:absolute; opacity:0; pointer-events:none; }
+
+/* Config panel */
+.config-panel {
+    background:#fff; border-radius:.625rem; border:1px solid #e2e8f0;
+    padding:1.25rem; margin-bottom:1rem; animation:fadeInUp .3s ease-out;
+}
+.config-panel-title { font-size:.85rem; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:.04em; margin-bottom:.75rem; }
+
+/* Day pills */
+.day-pills { display:flex; gap:.5rem; flex-wrap:wrap; }
+.day-pill {
+    display:flex; align-items:center; gap:.35rem;
+    padding:.4rem .85rem; border-radius:999px; font-size:.8rem; font-weight:600;
+    border:2px solid #e2e8f0; cursor:pointer; transition:all .15s; user-select:none;
+    color:#64748b; background:#fff;
+}
+.day-pill:hover { border-color:#f59e0b; }
+.day-pill.checked { background:#f59e0b; color:#fff; border-color:#f59e0b; }
+.day-pill input { position:absolute; opacity:0; pointer-events:none; }
+
+/* Save button */
+.sched-save-btn {
+    padding:.7rem 2rem; font-size:.9rem; font-weight:700; border:none; border-radius:.5rem;
+    cursor:pointer; transition:all .2s; text-transform:uppercase; letter-spacing:.04em;
+    background:linear-gradient(135deg, #f59e0b, #d97706); color:#fff;
+    box-shadow:0 4px 14px rgba(245,158,11,.3);
+}
+.sched-save-btn:hover { transform:translateY(-1px); box-shadow:0 6px 20px rgba(245,158,11,.4); }
+
+@media (max-width: 768px) {
+    .mode-grid { grid-template-columns:1fr; }
+    .sched-countdown-box { gap:.75rem; }
+    .sched-countdown-num { font-size:1.5rem; }
+}
+</style>
+
+<!-- ================================================================ -->
+<!-- HERO STATUS BANNER                                                -->
+<!-- ================================================================ -->
+<div class="sched-hero">
+    <div class="sched-hero-inner">
+        <div class="sched-hero-top">
+            <span class="sched-hero-icon">&#9200;</span>
+            <div>
+                <div class="sched-hero-title">Pipeline Scheduler</div>
+                <div style="font-size:.85rem; color:rgba(255,255,255,.6); margin-top:.15rem;">
+                    {% if sched.mode == 'interval' %}
+                        Every {{ sched.interval_value }} {{ sched.interval_unit }}
+                    {% elif sched.mode == 'daily' %}
+                        Daily at {{ sched.daily_time }}
+                    {% elif sched.mode == 'weekly' %}
+                        {{ sched.weekly_days|join(', ')|title }} at {{ sched.weekly_time }}
+                    {% endif %}
+                </div>
+            </div>
+
             {% if sched.active %}
-            <form method="post" action="/scheduler/stop" style="margin:0;">
-                <button type="submit" class="btn btn-danger btn-small">Pause</button>
-            </form>
+            <span class="sched-pill sched-pill-active"><span class="dot"></span> Active</span>
             {% else %}
-            <form method="post" action="/scheduler/start" style="margin:0;">
-                <button type="submit" class="btn btn-primary btn-small">Start</button>
-            </form>
+            <span class="sched-pill sched-pill-paused">Paused</span>
             {% endif %}
+
+            <div class="sched-hero-actions">
+                {% if sched.active %}
+                <form method="post" action="/scheduler/stop" style="margin:0;">
+                    <button type="submit" class="sched-hero-btn sched-stop-btn">Pause Scheduler</button>
+                </form>
+                {% else %}
+                <form method="post" action="/scheduler/start" style="margin:0;">
+                    <button type="submit" class="sched-hero-btn sched-start-btn">Start Scheduler</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if sched.active and sched.next_run_at %}
+        <!-- Countdown -->
+        <div class="sched-countdown-box" id="countdown-box">
+            <div class="sched-countdown-unit">
+                <div class="sched-countdown-num" id="cd-hours">--</div>
+                <div class="sched-countdown-label">Hours</div>
+            </div>
+            <div class="sched-countdown-unit">
+                <div class="sched-countdown-num" id="cd-minutes">--</div>
+                <div class="sched-countdown-label">Minutes</div>
+            </div>
+            <div class="sched-countdown-unit">
+                <div class="sched-countdown-num" id="cd-seconds">--</div>
+                <div class="sched-countdown-label">Seconds</div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="sched-meta-row">
+            {% if sched.last_run_at %}
+            <div>Last run: <strong>{{ sched.last_run_at[:19] }}</strong></div>
+            {% endif %}
+            {% if sched.next_run_at and sched.active %}
+            <div>Next run: <strong id="next-run-display">{{ sched.next_run_at[:19] }}</strong></div>
+            {% endif %}
+            <div>Mode: <strong>{{ sched.mode|capitalize }}</strong></div>
         </div>
     </div>
 </div>
 
-<!-- Schedule config form -->
-<div class="card">
-    <h2>Schedule Configuration</h2>
-    <form method="post" action="/scheduler/config" id="sched-config-form">
-        <div class="form-group">
-            <label for="mode">Mode</label>
-            <select name="mode" id="mode" onchange="toggleMode()">
-                <option value="interval" {% if sched.mode == 'interval' %}selected{% endif %}>Interval</option>
-                <option value="daily" {% if sched.mode == 'daily' %}selected{% endif %}>Daily</option>
-                <option value="weekly" {% if sched.mode == 'weekly' %}selected{% endif %}>Weekly</option>
-            </select>
+{% if saved %}
+<div class="alert-box alert-success" style="animation:fadeInUp .3s ease-out;">Schedule saved successfully.</div>
+{% endif %}
+{% if error %}
+<div class="alert-box alert-error" style="animation:fadeInUp .3s ease-out;">{{ error }}</div>
+{% endif %}
+
+<!-- ================================================================ -->
+<!-- SCHEDULE CONFIGURATION                                            -->
+<!-- ================================================================ -->
+<div class="card" style="animation:fadeInUp .4s ease-out .1s both;">
+    <h2 style="margin-bottom:1.25rem;">Schedule Configuration</h2>
+
+    <form method="post" action="/scheduler/config" id="sched-form">
+        <!-- Mode selector -->
+        <div class="mode-grid">
+            <label class="mode-card {% if sched.mode == 'interval' %}selected{% endif %}" id="mode-interval-card">
+                <input type="radio" name="mode" value="interval" {% if sched.mode == 'interval' %}checked{% endif %} onchange="selectMode('interval')">
+                <div class="mode-card-icon">&#128260;</div>
+                <div class="mode-card-name">Interval</div>
+                <div class="mode-card-desc">Every N hours or days</div>
+            </label>
+            <label class="mode-card {% if sched.mode == 'daily' %}selected{% endif %}" id="mode-daily-card">
+                <input type="radio" name="mode" value="daily" {% if sched.mode == 'daily' %}checked{% endif %} onchange="selectMode('daily')">
+                <div class="mode-card-icon">&#9728;</div>
+                <div class="mode-card-name">Daily</div>
+                <div class="mode-card-desc">Once a day at a set time</div>
+            </label>
+            <label class="mode-card {% if sched.mode == 'weekly' %}selected{% endif %}" id="mode-weekly-card">
+                <input type="radio" name="mode" value="weekly" {% if sched.mode == 'weekly' %}checked{% endif %} onchange="selectMode('weekly')">
+                <div class="mode-card-icon">&#128197;</div>
+                <div class="mode-card-name">Weekly</div>
+                <div class="mode-card-desc">Specific days of the week</div>
+            </label>
         </div>
 
-        <!-- Interval mode fields -->
-        <div id="interval-fields" style="display:none;">
-            <div style="display:flex; gap:1rem;">
-                <div class="form-group" style="flex:1;">
-                    <label for="interval_value">Every</label>
+        <!-- Interval config -->
+        <div class="config-panel" id="cfg-interval" style="display:none;">
+            <div class="config-panel-title">Interval settings</div>
+            <div style="display:flex; gap:1rem; align-items:end;">
+                <div class="form-group" style="flex:1; margin-bottom:0;">
+                    <label for="interval_value">Run every</label>
                     <input type="number" name="interval_value" id="interval_value" min="1" max="168"
-                           value="{{ sched.interval_value }}">
+                           value="{{ sched.interval_value }}" style="font-size:1.1rem; font-weight:700; text-align:center;">
                 </div>
-                <div class="form-group" style="flex:1;">
+                <div class="form-group" style="flex:1; margin-bottom:0;">
                     <label for="interval_unit">Unit</label>
-                    <select name="interval_unit" id="interval_unit">
+                    <select name="interval_unit" id="interval_unit" style="font-size:1.1rem;">
                         <option value="hours" {% if sched.interval_unit == 'hours' %}selected{% endif %}>Hours</option>
                         <option value="days" {% if sched.interval_unit == 'days' %}selected{% endif %}>Days</option>
                     </select>
@@ -66,79 +243,94 @@
             </div>
         </div>
 
-        <!-- Daily mode fields -->
-        <div id="daily-fields" style="display:none;">
-            <div class="form-group">
+        <!-- Daily config -->
+        <div class="config-panel" id="cfg-daily" style="display:none;">
+            <div class="config-panel-title">Daily settings</div>
+            <div class="form-group" style="margin-bottom:0;">
                 <label for="daily_time">Run at</label>
-                <input type="time" name="daily_time" id="daily_time" value="{{ sched.daily_time }}">
+                <input type="time" name="daily_time" id="daily_time" value="{{ sched.daily_time }}"
+                       style="font-size:1.1rem; font-weight:700; text-align:center; max-width:200px;">
             </div>
         </div>
 
-        <!-- Weekly mode fields -->
-        <div id="weekly-fields" style="display:none;">
+        <!-- Weekly config -->
+        <div class="config-panel" id="cfg-weekly" style="display:none;">
+            <div class="config-panel-title">Weekly settings</div>
             <div class="form-group">
-                <label>Days</label>
-                <div style="display:flex; flex-wrap:wrap; gap:.5rem;">
+                <label style="margin-bottom:.5rem;">Run on these days</label>
+                <div class="day-pills">
                     {% for day in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}
-                    <label style="display:flex; align-items:center; gap:.25rem; font-size:.875rem; font-weight:normal;">
+                    <label class="day-pill {% if day in sched.weekly_days %}checked{% endif %}" onclick="toggleDay(this)">
                         <input type="checkbox" name="weekly_days" value="{{ day }}"
                                {% if day in sched.weekly_days %}checked{% endif %}>
-                        {{ day|capitalize }}
+                        {{ day[:3]|capitalize }}
                     </label>
                     {% endfor %}
                 </div>
             </div>
-            <div class="form-group">
+            <div class="form-group" style="margin-bottom:0;">
                 <label for="weekly_time">Run at</label>
-                <input type="time" name="weekly_time" id="weekly_time" value="{{ sched.weekly_time }}">
+                <input type="time" name="weekly_time" id="weekly_time" value="{{ sched.weekly_time }}"
+                       style="font-size:1.1rem; font-weight:700; text-align:center; max-width:200px;">
             </div>
         </div>
 
-        <button type="submit" class="btn btn-primary" style="margin-top:.5rem;">Save Schedule</button>
+        <button type="submit" class="sched-save-btn" style="margin-top:.75rem;">Save Schedule</button>
     </form>
 </div>
 
-{% if saved %}
-<div class="alert-box alert-success">Schedule saved.</div>
-{% endif %}
-{% if error %}
-<div class="alert-box alert-error">{{ error }}</div>
-{% endif %}
-
 <script>
-function toggleMode() {
-    var mode = document.getElementById('mode').value;
-    document.getElementById('interval-fields').style.display = mode === 'interval' ? 'block' : 'none';
-    document.getElementById('daily-fields').style.display = mode === 'daily' ? 'block' : 'none';
-    document.getElementById('weekly-fields').style.display = mode === 'weekly' ? 'block' : 'none';
+function selectMode(mode) {
+    document.querySelectorAll('.mode-card').forEach(function(c) { c.classList.remove('selected'); });
+    document.getElementById('mode-' + mode + '-card').classList.add('selected');
+    document.getElementById('cfg-interval').style.display = mode === 'interval' ? 'block' : 'none';
+    document.getElementById('cfg-daily').style.display = mode === 'daily' ? 'block' : 'none';
+    document.getElementById('cfg-weekly').style.display = mode === 'weekly' ? 'block' : 'none';
 }
-toggleMode();
 
-// Countdown timer for next run
-var nextEl = document.getElementById('next-run-time');
-var countdownEl = document.getElementById('next-run-countdown');
-if (nextEl && countdownEl) {
-    var nextStr = nextEl.textContent.trim();
-    function updateCountdown() {
-        var next = new Date(nextStr);
-        var now = new Date();
-        var diff = Math.max(0, Math.floor((next - now) / 1000));
-        if (diff <= 0) {
-            countdownEl.textContent = '(imminent)';
-            return;
-        }
+function toggleDay(el) {
+    var cb = el.querySelector('input');
+    // The click already toggled the checkbox, just sync the class
+    setTimeout(function() {
+        if (cb.checked) { el.classList.add('checked'); }
+        else { el.classList.remove('checked'); }
+    }, 0);
+}
+
+// Init: show the right config panel
+(function() {
+    var checked = document.querySelector('input[name="mode"]:checked');
+    if (checked) selectMode(checked.value);
+})();
+
+// Countdown timer
+{% if sched.active and sched.next_run_at %}
+(function() {
+    var target = new Date('{{ sched.next_run_at }}');
+    var hEl = document.getElementById('cd-hours');
+    var mEl = document.getElementById('cd-minutes');
+    var sEl = document.getElementById('cd-seconds');
+
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+    function tick() {
+        var diff = Math.max(0, Math.floor((target - new Date()) / 1000));
         var h = Math.floor(diff / 3600);
         var m = Math.floor((diff % 3600) / 60);
         var s = diff % 60;
-        var parts = [];
-        if (h) parts.push(h + 'h');
-        if (m) parts.push(m + 'm');
-        parts.push(s + 's');
-        countdownEl.textContent = '(in ' + parts.join(' ') + ')';
+        hEl.textContent = pad(h);
+        mEl.textContent = pad(m);
+        sEl.textContent = pad(s);
+        if (diff <= 0) {
+            hEl.textContent = '00';
+            mEl.textContent = '00';
+            sEl.textContent = '00';
+        }
     }
-    updateCountdown();
-    setInterval(updateCountdown, 1000);
-}
+    tick();
+    setInterval(tick, 1000);
+})();
+{% endif %}
 </script>
 
 {% endblock %}
