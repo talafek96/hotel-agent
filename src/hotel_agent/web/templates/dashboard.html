@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% from "_macros.html" import platform_badge %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.hotels }}</div>
+        <div class="stat-label">Hotels</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.active_bookings }}</div>
+        <div class="stat-label">Active Bookings</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.price_snapshots }}</div>
+        <div class="stat-label">Price Snapshots</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.total_alerts }}</div>
+        <div class="stat-label">Alerts</div>
+    </div>
+</div>
+
+{% if stats.last_run %}
+<div class="card" style="margin-top:1rem; padding:1rem 1.25rem;">
+    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+        <strong style="font-size:.875rem;">Last scrape</strong>
+        <span class="badge {% if stats.last_run.status == 'completed' %}badge-green{% else %}badge-yellow{% endif %}">
+            {{ stats.last_run.status }}
+        </span>
+        <span style="color:#64748b; font-size:.8125rem;">
+            {{ stats.last_run.finished_at or stats.last_run.started_at }}
+        </span>
+        <span style="font-size:.8125rem;">
+            <strong>{{ stats.last_run.successful }}</strong>/{{ stats.last_run.total_hotels }} hotels OK
+            {% if stats.last_run.failed > 0 %}
+                &middot; <span style="color:#dc2626;">{{ stats.last_run.failed }} failed</span>
+            {% endif %}
+        </span>
+        <a href="/scrapes" style="margin-left:auto; font-size:.8125rem;">View all runs</a>
+    </div>
+    {% if stats.last_run.details %}
+    <details style="margin-top:0.5rem; font-size:.8125rem;" open>
+        <summary style="cursor:pointer; color:#64748b;">Per-hotel results</summary>
+        <table style="margin-top:.5rem;">
+            <thead>
+                <tr><th>Hotel</th><th>Sources</th><th>Prices</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                {% for d in stats.last_run.details %}
+                <tr>
+                    <td>{{ d.hotel }}</td>
+                    <td>
+                        {% if d.sources is defined and d.sources %}
+                            {% for src in d.sources %}
+                            {{ platform_badge(src.platform, src.link|default("")) }}
+                            {% endfor %}
+                        {% else %}
+                            <span class="badge badge-blue">{{ d.provider|default("serpapi") }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ d.prices }}</td>
+                    <td>
+                        {% if d.status == 'ok' %}<span class="badge badge-green">OK</span>
+                        {% elif d.status == 'no prices' %}<span class="badge badge-yellow">no prices</span>
+                        {% else %}<span class="badge badge-red">{{ d.status[:60] }}</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </details>
+    {% endif %}
+    {% if stats.last_run.failed > 0 and stats.last_run.errors %}
+    <details style="margin-top:0.5rem; font-size:.8125rem;">
+        <summary style="cursor:pointer; color:#64748b;">Show errors</summary>
+        <ul style="margin:0.5rem 0 0 1rem; color:#991b1b;">
+            {% for err in stats.last_run.errors %}
+            <li>{{ err }}</li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if alerts %}
+<div class="card" style="margin-top:2rem;">
+    <h2>Recent Alerts</h2>
+    <table>
+        <thead>
+            <tr><th>Type</th><th>Severity</th><th>Title</th><th>Price Diff</th></tr>
+        </thead>
+        <tbody>
+            {% for a in alerts %}
+            <tr>
+                <td><span class="badge badge-blue">{{ a.alert_type }}</span></td>
+                <td>
+                    {% if a.severity == 'urgent' %}<span class="badge badge-red">{{ a.severity }}</span>
+                    {% elif a.severity == 'important' %}<span class="badge badge-yellow">{{ a.severity }}</span>
+                    {% else %}<span class="badge">{{ a.severity }}</span>{% endif %}
+                </td>
+                <td>{{ a.title }}</td>
+                <td>{{ "%.0f"|format(a.price_diff) }} ({{ "%.1f"|format(a.percentage_diff) }}%)</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <a href="/alerts" class="btn btn-primary" style="margin-top:1rem;">View All Alerts</a>
+</div>
+{% endif %}
+
+{% if bookings %}
+<div class="card" style="margin-top:2rem;">
+    <h2>Active Bookings</h2>
+    <table>
+        <thead>
+            <tr><th>Hotel</th><th>Check-in</th><th>Check-out</th><th>Price</th><th>Platform</th><th>Price Data</th></tr>
+        </thead>
+        <tbody>
+            {% for item in bookings %}
+            <tr>
+                <td>{{ item.hotel.name if item.hotel else "?" }}</td>
+                <td>{{ item.booking.check_in or "?" }}</td>
+                <td>{{ item.booking.check_out or "?" }}</td>
+                <td>{{ "{:,.0f}".format(item.booking.booked_price) }} {{ item.booking.currency }}</td>
+                <td>{{ item.booking.platform }}</td>
+                <td>
+                    {% if item.snapshot_count > 0 %}<span class="badge badge-green">{{ item.snapshot_count }} prices</span>
+                    {% else %}<span class="badge badge-yellow">none</span>{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <a href="/bookings" class="btn btn-primary" style="margin-top:1rem;">View All Bookings</a>
+</div>
+{% endif %}
+{% endblock %}

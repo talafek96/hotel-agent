@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Check Prices{% endblock %}
+{% block topbar_title %}Price Check{% endblock %}
+{% block content %}
+<h1>Price Comparison</h1>
+
+{% if result %}
+<div class="alert-box alert-success">
+    Analysis complete: {{ result.new_alerts|length }} new alert{{ "s" if result.new_alerts|length != 1 else "" }} generated.
+</div>
+
+{% if result.all_alerts %}
+{% for item in result.all_alerts %}
+{% set a = item.alert %}
+<div class="card" style="margin-bottom:1rem;">
+    <div style="display:flex; align-items:center; gap:.75rem; margin-bottom:.5rem;">
+        {% if a.severity == 'urgent' %}<span class="badge badge-red">{{ a.severity }}</span>
+        {% elif a.severity == 'important' %}<span class="badge badge-yellow">{{ a.severity }}</span>
+        {% else %}<span class="badge">{{ a.severity }}</span>{% endif %}
+        <span class="badge badge-blue">{{ a.alert_type }}</span>
+        <strong>{{ a.title }}</strong>
+    </div>
+
+    {% if item.booking %}
+    <div style="background:#f8fafc; border-radius:.375rem; padding:.75rem 1rem; margin:.5rem 0; font-size:.875rem; border-left:3px solid #94a3b8;">
+        <strong>Your booking:</strong>
+        {{ "{:,.0f}".format(item.booking.booked_price) }} {{ item.booking.currency }}
+        on {{ item.booking.platform }}
+        | {{ item.booking.room_type or "Standard" }}
+        | {{ item.booking.check_in }} to {{ item.booking.check_out }}
+        {% if item.booking.booking_reference %}
+        | Ref: <code>{{ item.booking.booking_reference }}</code>
+        {% endif %}
+        {% if item.booking.booking_url %}
+        | <a href="{{ item.booking.booking_url }}" target="_blank" rel="noopener">View booking</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if a.details %}
+    <p style="margin:.25rem 0; font-weight:600;">
+        {{ a.details|length }} option{{ "s" if a.details|length != 1 else "" }}
+        (best saving: {{ "{:,.0f}".format(a.price_diff) }} / {{ "{:.1f}".format(a.percentage_diff) }}%)
+    </p>
+    <table style="font-size:.875rem;">
+        <thead>
+            <tr>
+                <th>Platform</th>
+                <th>Price</th>
+                <th>Saving</th>
+                <th>Room Type</th>
+                <th>Cancellable</th>
+                <th>Breakfast</th>
+                <th>Amenities</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for d in a.details %}
+            <tr>
+                <td>
+                    {% if d.link %}
+                    <a href="{{ d.link }}" target="_blank" rel="noopener"><strong>{{ d.platform }}</strong></a>
+                    {% else %}
+                    <strong>{{ d.platform }}</strong>
+                    {% endif %}
+                </td>
+                <td>{{ "{:,.0f}".format(d.price) }} {{ d.currency }}</td>
+                <td style="color:#16a34a; font-weight:600;">-{{ "{:.1f}".format(d.percentage_diff) }}%</td>
+                <td>{{ d.room_type or "Standard" }}</td>
+                <td>
+                    {% if d.is_cancellable %}<span style="color:#16a34a;">Yes</span>
+                    {% elif d.is_cancellable is none %}<span style="color:#94a3b8;">?</span>
+                    {% else %}<span style="color:#dc2626;">No</span>{% endif %}
+                </td>
+                <td>
+                    {% if d.breakfast_included %}<span style="color:#16a34a;">Yes</span>
+                    {% elif d.breakfast_included is none %}<span style="color:#94a3b8;">?</span>
+                    {% else %}<span style="color:#94a3b8;">No</span>{% endif %}
+                </td>
+                <td><small>{{ d.amenities|join(", ") if d.amenities else "" }}</small></td>
+                <td>
+                    {% if d.link %}
+                    <a href="{{ d.link }}" target="_blank" rel="noopener" class="btn btn-small">Book</a>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <pre style="white-space:pre-wrap; font-size:.85rem;">{{ a.message }}</pre>
+    {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<div class="alert-box alert-info">No price alerts at this time. Prices look stable.</div>
+{% endif %}
+
+{% else %}
+<div class="card">
+    <p>Compare your booked prices against the latest scraped prices to find savings opportunities.</p>
+    <form method="post" style="margin-top:1rem;">
+        <button type="submit" class="btn btn-primary">Run Price Check</button>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

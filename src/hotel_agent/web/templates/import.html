@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Import{% endblock %}
+{% block topbar_title %}Import Bookings{% endblock %}
+{% block content %}
+<h1>Import from Excel</h1>
+
+{% if result %}
+    {% if result.success %}
+    <div class="alert-box alert-success">{{ result.message }}</div>
+    {% else %}
+    <div class="alert-box alert-error">Import failed: {{ result.message }}</div>
+    {% endif %}
+{% endif %}
+
+<div class="card">
+    <h2>Upload Excel File</h2>
+    <form method="post" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="file">Excel File (.xlsx)</label>
+            <input type="file" id="file" name="file" accept=".xlsx,.xls" required>
+        </div>
+        <div class="form-group">
+            <label for="sheet">Sheet Name</label>
+            <input type="text" id="sheet" name="sheet" placeholder="e.g. Hotels" required>
+        </div>
+        <div class="form-group">
+            <label for="table">Table Name (optional)</label>
+            <input type="text" id="table" name="table" placeholder="e.g. BookingsTable (leave empty if none)">
+        </div>
+        <button type="submit" class="btn btn-primary">Import</button>
+    </form>
+</div>
+
+{% if result and result.success and result.pairs %}
+<div class="card">
+    <h2>Imported Bookings</h2>
+    <table>
+        <thead>
+            <tr><th>#</th><th>Hotel</th><th>City</th><th>Check-in</th><th>Check-out</th><th>Price</th><th>Platform</th></tr>
+        </thead>
+        <tbody>
+            {% for hotel, booking in result.pairs %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td><strong>{{ hotel.name }}</strong></td>
+                <td>{{ hotel.city }}</td>
+                <td>{{ booking.check_in or "?" }}</td>
+                <td>{{ booking.check_out or "?" }}</td>
+                <td>{{ "{:,.0f}".format(booking.booked_price) }} {{ booking.currency }}</td>
+                <td>{{ booking.platform }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

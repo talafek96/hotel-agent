@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "_macros.html" import platform_badge %}
+{% block title %}Scrape Runs{% endblock %}
+{% block topbar_title %}Scrape Runs{% endblock %}
+{% block content %}
+<h1>Scrape History</h1>
+
+{% if error is defined and error %}
+<div class="alert-box alert-error">{{ error }}</div>
+{% endif %}
+
+{% if not runs %}
+<div class="alert-box alert-info">No scrapes yet. <a href="/scrape">Run a scrape</a> to get started.</div>
+{% else %}
+
+{% for run in runs %}
+<div class="card" style="padding:1rem 1.25rem;">
+    <details{% if loop.index == 1 %} open{% endif %}>
+        <summary style="cursor:pointer; display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; list-style:none;">
+            <strong style="font-size:.875rem;">Run #{{ run.id }}</strong>
+            <span class="badge {% if run.status == 'completed' %}badge-green{% elif run.status == 'running' %}badge-yellow{% else %}badge-red{% endif %}">
+                {{ run.status }}
+            </span>
+            <span style="color:#64748b; font-size:.8125rem;">
+                {{ run.finished_at or run.started_at }}
+            </span>
+            <span style="font-size:.8125rem;">
+                <strong>{{ run.successful }}</strong>/{{ run.total_hotels }} OK
+                {% if run.failed > 0 %}
+                    &middot; <span style="color:#dc2626;">{{ run.failed }} failed</span>
+                {% endif %}
+            </span>
+            <span style="font-size:.8125rem; color:#64748b; margin-left:auto;">
+                {% set total_prices = run.details | selectattr("prices") | map(attribute="prices") | sum %}
+                {{ total_prices }} prices found
+            </span>
+        </summary>
+
+        {% if run.details %}
+        <table style="margin-top:0.75rem; font-size:.8125rem;">
+            <thead>
+                <tr><th>Hotel</th><th>Sources</th><th>Prices</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                {% for d in run.details %}
+                <tr>
+                    <td>{{ d.hotel }}</td>
+                    <td>
+                        {% if d.sources is defined and d.sources %}
+                            {% for src in d.sources %}
+                            {{ platform_badge(src.platform, src.link|default("")) }}
+                            {% endfor %}
+                        {% else %}
+                            <span class="badge badge-blue">{{ d.provider|default("serpapi") }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ d.prices }}</td>
+                    <td>
+                        {% if d.status == 'ok' %}<span class="badge badge-green">OK</span>
+                        {% elif d.status == 'no prices' %}<span class="badge badge-yellow">no prices</span>
+                        {% else %}<span class="badge badge-red">{{ d.status[:60] }}</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if run.errors %}
+        <details style="margin-top:0.5rem; font-size:.8125rem;">
+            <summary style="cursor:pointer; color:#dc2626;">{{ run.errors|length }} error{{ "s" if run.errors|length != 1 else "" }}</summary>
+            <ul style="margin:0.5rem 0 0 1rem; color:#991b1b;">
+                {% for err in run.errors %}
+                <li>{{ err }}</li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% endif %}
+    </details>
+</div>
+{% endfor %}
+
+{% endif %}
+{% endblock %}

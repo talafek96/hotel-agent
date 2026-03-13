@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Edit Booking{% endblock %}
+{% block topbar_title %}Edit Booking #{{ booking.id }}{% endblock %}
+{% block content %}
+<h1>Edit Booking — {{ hotel.name if hotel else "?" }}</h1>
+
+{% if saved %}
+<div class="alert-box alert-success">Changes saved successfully.</div>
+{% endif %}
+
+{% if error %}
+<div class="alert-box alert-error">{{ error }}</div>
+{% endif %}
+
+<form method="post">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+
+<!-- Left column: Booking details -->
+<div class="card">
+    <h2>Booking Details</h2>
+    <p style="font-size:.8rem;color:#64748b;margin-bottom:1rem;">Fields imported from Excel. Edit to correct any mistakes.</p>
+
+    <div class="form-group">
+        <label for="check_in">Check-in</label>
+        <input type="date" id="check_in" name="check_in" value="{{ booking.check_in or '' }}">
+    </div>
+    <div class="form-group">
+        <label for="check_out">Check-out</label>
+        <input type="date" id="check_out" name="check_out" value="{{ booking.check_out or '' }}">
+    </div>
+    <div class="form-group">
+        <label for="room_type">Room Type</label>
+        <input type="text" id="room_type" name="room_type" value="{{ booking.room_type }}" placeholder="e.g. Deluxe Twin, Standard Double">
+    </div>
+    <div class="form-group">
+        <label for="booked_price">Total Price</label>
+        <input type="number" id="booked_price" name="booked_price" value="{{ booking.booked_price }}" step="0.01">
+    </div>
+    <div class="form-group">
+        <label for="currency">Currency</label>
+        <input type="text" id="currency" name="currency" value="{{ booking.currency }}" placeholder="JPY">
+    </div>
+    <div class="form-group">
+        <label for="platform">Platform</label>
+        <input type="text" id="platform" name="platform" value="{{ booking.platform }}" placeholder="e.g. booking.com">
+    </div>
+    <div class="form-group">
+        <label for="booking_reference">Booking Reference</label>
+        <input type="text" id="booking_reference" name="booking_reference" value="{{ booking.booking_reference }}">
+    </div>
+    <div class="form-group">
+        <label for="booking_url">Booking URL</label>
+        <input type="url" id="booking_url" name="booking_url" value="{{ booking.booking_url }}" placeholder="https://...">
+        <small style="color:#64748b;">Link to your booking confirmation page (shown in alerts for quick comparison).</small>
+    </div>
+    <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            <option value="active" {% if booking.status == 'active' %}selected{% endif %}>Active</option>
+            <option value="cancelled" {% if booking.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+            <option value="completed" {% if booking.status == 'completed' %}selected{% endif %}>Completed</option>
+        </select>
+    </div>
+</div>
+
+<!-- Right column: Room composition & extras -->
+<div>
+<div class="card">
+    <h2>Room Occupancy</h2>
+    <p style="font-size:.8rem;color:#64748b;margin-bottom:1rem;">
+        Who stays in this room? This determines what SerpAPI searches for when comparing prices.
+        Set the exact number of adults and children (with ages) for this specific room.
+    </p>
+
+    <div class="form-group">
+        <label for="adults">Adults</label>
+        <input type="number" id="adults" name="adults" value="{{ booking.travelers.adults }}" min="1" max="10">
+    </div>
+    <div class="form-group">
+        <label for="children_ages">Children Ages (comma-separated, leave empty if none)</label>
+        <input type="text" id="children_ages" name="children_ages"
+               value="{{ booking.travelers.children_ages | join(', ') if booking.travelers.children_ages else '' }}"
+               placeholder="e.g. 4, 7, 12">
+        <small style="color:#64748b;">Enter each child's age separated by commas. Example: 4, 7 means two children aged 4 and 7.</small>
+    </div>
+
+    <div style="background:#f8fafc; border-radius:.375rem; padding:1rem; margin-top:.5rem; font-size:.875rem;">
+        <strong>Current:</strong>
+        {{ booking.travelers.adults }} adult{{ 's' if booking.travelers.adults != 1 else '' }}
+        {% if booking.travelers.children_ages %}
+        + {{ booking.travelers.children_ages | length }} child{{ 'ren' if booking.travelers.children_ages | length != 1 else '' }}
+        (ages {{ booking.travelers.children_ages | join(', ') }})
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <h2>Room Features</h2>
+
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="is_cancellable" value="1"
+                   {% if booking.is_cancellable %}checked{% endif %}
+                   style="width:auto; margin-right:.5rem;">
+            Free cancellation
+        </label>
+    </div>
+    <div class="form-group">
+        <label for="cancellation_deadline">Cancellation Deadline</label>
+        <input type="date" id="cancellation_deadline" name="cancellation_deadline"
+               value="{{ booking.cancellation_deadline or '' }}">
+    </div>
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="breakfast_included" value="1"
+                   {% if booking.breakfast_included %}checked{% endif %}
+                   style="width:auto; margin-right:.5rem;">
+            Breakfast included
+        </label>
+    </div>
+    <div class="form-group">
+        <label for="bathroom_type">Bathroom Type</label>
+        <select id="bathroom_type" name="bathroom_type">
+            <option value="private" {% if booking.bathroom_type == 'private' %}selected{% endif %}>Private</option>
+            <option value="shared" {% if booking.bathroom_type == 'shared' %}selected{% endif %}>Shared</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="3">{{ booking.notes }}</textarea>
+    </div>
+</div>
+</div>
+
+</div>
+
+<div style="margin-top:1rem; display:flex; gap:1rem; align-items:center;">
+    <button type="submit" class="btn btn-primary">Save Changes</button>
+    <a href="/bookings" style="font-size:.875rem;">Back to Bookings</a>
+</div>
+</form>
+{% endblock %}

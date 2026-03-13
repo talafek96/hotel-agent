@@ -1,0 +1,63 @@
+[project]
+name = "hotel-agent"
+version = "0.1.0"
+description = "Cost-efficient hotel price tracking system"
+requires-python = ">=3.13"
+dependencies = [
+    "openpyxl>=3.1.5",
+    "litellm>=1.50.0",
+    "typer>=0.15.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.32.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.20",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
+    "ruff>=0.9.0",
+    "mypy>=1.14.0",
+    "types-PyYAML>=6.0",
+    "types-requests>=2.32",
+    "types-openpyxl>=3.1",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.uv]
+package = true
+
+[project.scripts]
+hotel-agent = "hotel_agent.cli:app"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"

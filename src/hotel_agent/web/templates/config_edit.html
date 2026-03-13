@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Configuration{% endblock %}
+{% block topbar_title %}Configuration{% endblock %}
+{% block content %}
+<h1>Edit Configuration</h1>
+<p style="font-size:.875rem;color:#64748b;margin-bottom:1.5rem;">
+    Changes are saved to <code>config.yaml</code>. Secrets (API keys, tokens) are loaded from
+    environment variables and cannot be edited here.
+</p>
+
+{% if saved %}
+<div class="alert-box alert-success">Configuration saved successfully.</div>
+{% endif %}
+{% if error %}
+<div class="alert-box alert-error">{{ error }}</div>
+{% endif %}
+
+<form method="post">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+
+<!-- Left column -->
+<div>
+<div class="card">
+    <h2>Travelers (Default)</h2>
+    <div class="form-group">
+        <label for="travelers_adults">Adults</label>
+        <input type="number" id="travelers_adults" name="travelers_adults" value="{{ config.travelers.adults }}" min="1" max="10">
+    </div>
+    <div class="form-group">
+        <label for="travelers_children">Children Ages (comma-separated)</label>
+        <input type="text" id="travelers_children" name="travelers_children"
+               value="{{ config.travelers.children_ages | join(', ') if config.travelers.children_ages else '' }}"
+               placeholder="e.g. 4, 7">
+    </div>
+</div>
+
+<div class="card">
+    <h2>LLM</h2>
+    <div class="form-group">
+        <label for="llm_provider">Provider</label>
+        <select id="llm_provider" name="llm_provider" onchange="onProviderChange()">
+            <option value="openai" {% if config.llm.provider == 'openai' %}selected{% endif %}>OpenAI</option>
+            <option value="anthropic" {% if config.llm.provider == 'anthropic' %}selected{% endif %}>Anthropic</option>
+            <option value="gemini" {% if config.llm.provider == 'gemini' %}selected{% endif %}>Google Gemini</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="llm_model">Model</label>
+        <div style="display:flex; gap:.5rem; align-items:flex-start;">
+            <input type="text" id="llm_model" name="llm_model" list="model_list"
+                   value="{{ config.llm.model }}" style="flex:1;" placeholder="e.g. gpt-4o-mini">
+            <button type="button" id="fetch_models_btn" onclick="fetchModels()"
+                    class="btn" style="white-space:nowrap; padding:.5rem .75rem;">
+                Load models
+            </button>
+        </div>
+        <datalist id="model_list"></datalist>
+        <small id="model_status" style="color:#64748b; display:block; margin-top:.25rem;">
+            Click "Load models" to fetch available models from your provider.
+        </small>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Currency</h2>
+    <div class="form-group">
+        <label for="currency_base">Base Currency</label>
+        <input type="text" id="currency_base" name="currency_base" value="{{ config.currency.base }}" placeholder="USD">
+    </div>
+    <div class="form-group">
+        <label for="currency_rates">Exchange Rates (YAML format, one per line)</label>
+        <textarea id="currency_rates" name="currency_rates" rows="4" placeholder="JPY: 0.0067&#10;EUR: 1.08">{% for k, v in config.currency.rates.items() %}{{ k }}: {{ v }}
+{% endfor %}</textarea>
+        <small style="color:#64748b;">Example: JPY: 0.0067 means 1 JPY = 0.0067 base currency.</small>
+    </div>
+</div>
+</div>
+
+<!-- Right column -->
+<div>
+<div class="card">
+    <h2>Alert Thresholds</h2>
+    <h3 style="font-size:.875rem;">Price Drop</h3>
+    <div class="form-group">
+        <label for="alert_pd_abs">Min Absolute Drop</label>
+        <input type="number" id="alert_pd_abs" name="alert_price_drop_min_absolute" value="{{ config.alerts.price_drop_min_absolute }}" step="0.01">
+    </div>
+    <div class="form-group">
+        <label for="alert_pd_pct">Min Percentage Drop (%)</label>
+        <input type="number" id="alert_pd_pct" name="alert_price_drop_min_percentage" value="{{ config.alerts.price_drop_min_percentage }}" step="0.1">
+    </div>
+    <h3 style="font-size:.875rem; margin-top:1rem;">Room Upgrade</h3>
+    <div class="form-group">
+        <label for="alert_up_cost">Max Extra Cost</label>
+        <input type="number" id="alert_up_cost" name="alert_upgrade_max_extra_cost" value="{{ config.alerts.upgrade_max_extra_cost }}" step="0.01">
+    </div>
+    <div class="form-group">
+        <label for="alert_up_pct">Max Extra Percentage (%)</label>
+        <input type="number" id="alert_up_pct" name="alert_upgrade_max_extra_percentage" value="{{ config.alerts.upgrade_max_extra_percentage }}" step="0.1">
+    </div>
+    <h3 style="font-size:.875rem; margin-top:1rem;">Filtering</h3>
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="alert_only_cancellable" value="1"
+                   {% if config.alerts.only_cancellable %}checked{% endif %}
+                   style="width:auto; margin-right:.5rem;">
+            Only cancellable rooms
+        </label>
+        <small style="color:#64748b; display:block; margin-top:.25rem;">
+            Skip non-cancellable prices when generating alerts.
+        </small>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Notifications</h2>
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="notif_telegram" value="1"
+                   {% if config.notifications.telegram_enabled %}checked{% endif %}
+                   style="width:auto; margin-right:.5rem;">
+            Telegram Enabled
+        </label>
+    </div>
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="notif_email" value="1"
+                   {% if config.notifications.email_enabled %}checked{% endif %}
+                   style="width:auto; margin-right:.5rem;">
+            Email Enabled
+        </label>
+    </div>
+    <div class="form-group">
+        <label for="notif_digest_time">Email Digest Time</label>
+        <input type="text" id="notif_digest_time" name="notif_digest_time" value="{{ config.notifications.email_digest_time }}" placeholder="08:00">
+    </div>
+</div>
+
+<div class="card">
+    <h2>Database</h2>
+    <div class="form-group">
+        <label for="db_path">Database Path</label>
+        <input type="text" id="db_path" name="db_path" value="{{ config.db_path }}">
+    </div>
+</div>
+</div>
+
+</div>
+
+<div style="margin-top:1rem;">
+    <button type="submit" class="btn btn-primary">Save Configuration</button>
+</div>
+</form>
+
+<script>
+function onProviderChange() {
+    document.getElementById('model_list').innerHTML = '';
+    document.getElementById('model_status').textContent =
+        'Provider changed. Click "Load models" to see available models.';
+}
+
+async function fetchModels() {
+    var btn = document.getElementById('fetch_models_btn');
+    var status = document.getElementById('model_status');
+    var provider = document.getElementById('llm_provider').value;
+    var datalist = document.getElementById('model_list');
+
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+    status.textContent = 'Fetching models from ' + provider + '...';
+    datalist.innerHTML = '';
+
+    try {
+        var resp = await fetch('/api/models?provider=' + encodeURIComponent(provider));
+        var data = await resp.json();
+
+        if (data.error) {
+            status.textContent = 'Error: ' + data.error;
+            status.style.color = '#dc2626';
+        } else {
+            var models = data.models || [];
+            models.forEach(function(m) {
+                var opt = document.createElement('option');
+                opt.value = m;
+                datalist.appendChild(opt);
+            });
+            status.textContent = models.length + ' models loaded. Type or select from the dropdown.';
+            status.style.color = '#16a34a';
+
+            // Focus input to show datalist
+            var input = document.getElementById('llm_model');
+            input.focus();
+        }
+    } catch (e) {
+        status.textContent = 'Failed to fetch models: ' + e.message;
+        status.style.color = '#dc2626';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Load models';
+    }
+}
+</script>
+{% endblock %}

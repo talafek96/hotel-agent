@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.ruff_cache/
+.cache/
+.pytest_cache/
+.mypy_cache/
+
+# Data & secrets
+data/
+data/*.db
+data/screenshots/
+.env
+config.yaml
+*.xlsx
+*.xls
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI Agents
+.cognition/
+PROMPT.md

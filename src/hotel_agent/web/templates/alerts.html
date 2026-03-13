@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "_macros.html" import platform_badge %}
+{% block title %}Alerts{% endblock %}
+{% block topbar_title %}Alerts{% endblock %}
+{% block content %}
+<h1>Alerts ({{ alerts|length }})</h1>
+
+{% if not alerts %}
+<div class="alert-box alert-info">No pending alerts. Run a price check to generate alerts.</div>
+<a href="/check" class="btn btn-primary">Run Price Check</a>
+{% else %}
+{% for item in alerts %}
+{% set a = item.alert %}
+<div class="card" style="margin-bottom:1rem;">
+    <div style="display:flex; align-items:center; gap:.75rem; margin-bottom:.5rem;">
+        {% if a.severity == 'urgent' %}<span class="badge badge-red">{{ a.severity }}</span>
+        {% elif a.severity == 'important' %}<span class="badge badge-yellow">{{ a.severity }}</span>
+        {% else %}<span class="badge">{{ a.severity }}</span>{% endif %}
+        <span class="badge badge-blue">{{ a.alert_type }}</span>
+        <strong style="font-size:1.1rem;">{{ a.title }}</strong>
+        {% if a.created_at %}
+        <span style="margin-left:auto; color:#64748b; font-size:.8rem;">{{ a.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        {% endif %}
+    </div>
+
+    {% if item.booking %}
+    <div style="background:#f8fafc; border-radius:.375rem; padding:.75rem 1rem; margin:.5rem 0; font-size:.875rem; border-left:3px solid #94a3b8;">
+        <strong>Your booking:</strong>
+        {{ "{:,.0f}".format(item.booking.booked_price) }} {{ item.booking.currency }}
+        on {{ item.booking.platform }}
+        | {{ item.booking.room_type or "Standard" }}
+        | {{ item.booking.check_in }} to {{ item.booking.check_out }}
+        {% if item.booking.booking_reference %}
+        | Ref: <code>{{ item.booking.booking_reference }}</code>
+        {% endif %}
+        {% if item.booking.booking_url %}
+        | <a href="{{ item.booking.booking_url }}" target="_blank" rel="noopener">View booking</a>
+        {% endif %}
+        <a href="/bookings/{{ item.booking.id }}/edit" style="margin-left:.5rem; font-size:.8rem;">Edit</a>
+    </div>
+    {% endif %}
+
+    {% if a.details %}
+    <p style="margin:.5rem 0; font-weight:600;">
+        {{ a.details|length }} option{{ "s" if a.details|length != 1 else "" }}
+        (best saving: {{ "{:,.0f}".format(a.price_diff) }} / {{ "{:.1f}".format(a.percentage_diff) }}%)
+    </p>
+
+    <table style="font-size:.875rem;">
+        <thead>
+            <tr>
+                <th>Platform</th>
+                <th>Price</th>
+                <th>Saving</th>
+                <th>Room Type</th>
+                <th>Cancellable</th>
+                <th>Breakfast</th>
+                <th>Amenities</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for d in a.details %}
+            <tr>
+                <td>{{ platform_badge(d.platform, d.link|default("")) }}</td>
+                <td>{{ "{:,.0f}".format(d.price) }} {{ d.currency }}</td>
+                <td style="color:#16a34a; font-weight:600;">-{{ "{:.1f}".format(d.percentage_diff) }}%</td>
+                <td>{{ d.room_type or "Standard" }}</td>
+                <td>
+                    {% if d.is_cancellable %}
+                        <span style="color:#16a34a;">Yes</span>
+                        {% if d.cancellation_deadline %}<br><small>by {{ d.cancellation_deadline }}</small>{% endif %}
+                    {% elif d.is_cancellable is none %}
+                        <span style="color:#94a3b8;">?</span>
+                    {% else %}
+                        <span style="color:#dc2626;">No</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if d.breakfast_included %}<span style="color:#16a34a;">Yes</span>
+                    {% elif d.breakfast_included is none %}<span style="color:#94a3b8;">?</span>
+                    {% else %}<span style="color:#94a3b8;">No</span>{% endif %}
+                </td>
+                <td><small>{{ d.amenities|join(", ") if d.amenities else "" }}</small></td>
+                <td>
+                    {% if d.link %}
+                    <a href="{{ d.link }}" target="_blank" rel="noopener" class="btn btn-small">Book</a>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <pre style="white-space:pre-wrap; font-size:.85rem; margin:.5rem 0;">{{ a.message }}</pre>
+    {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

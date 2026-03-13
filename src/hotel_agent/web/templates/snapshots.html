@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_macros.html" import platform_badge %}
+{% block title %}Snapshots{% endblock %}
+{% block topbar_title %}Snapshots{% endblock %}
+{% block content %}
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+    <h1>Price Snapshots ({{ snapshots|length }})</h1>
+    {% if snapshots %}
+    <form method="post" action="/snapshots/wipe"
+          onsubmit="return confirm('Delete ALL snapshots and alerts? This cannot be undone.');">
+        <button type="submit" class="btn btn-danger btn-small">Wipe All Snapshots</button>
+    </form>
+    {% endif %}
+</div>
+
+{% if wiped is defined and wiped is not none %}
+<div class="alert-box alert-success">
+    Wiped {{ wiped }} snapshot{{ "s" if wiped != 1 else "" }} and all alerts. Tracking starts fresh.
+</div>
+{% endif %}
+
+{% if deleted is defined and deleted is not none %}
+<div class="alert-box alert-success">
+    Snapshot #{{ deleted }} deleted.
+</div>
+{% endif %}
+
+{% if not snapshots %}
+{% if wiped is not defined %}
+<div class="alert-box alert-info">No snapshots yet. Run a <a href="/scrape">scrape</a> to fetch prices.</div>
+{% endif %}
+{% else %}
+<table>
+    <thead>
+        <tr><th>ID</th><th>Hotel</th><th>Platform</th><th>Room Type</th><th>Price</th><th>Dates</th><th>Scraped At</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for item in snapshots %}
+        {% set s = item.snapshot %}
+        <tr>
+            <td>{{ s.id }}</td>
+            <td>{{ item.hotel.name[:25] if item.hotel else "#" ~ s.hotel_id }}</td>
+            <td>{{ platform_badge(s.platform, s.link) }}</td>
+            <td>{{ s.room_type[:30] if s.room_type else "" }}</td>
+            <td><strong>{{ "{:,.0f}".format(s.price) }} {{ s.currency }}</strong></td>
+            <td>
+                {% if s.check_in and s.check_out %}
+                {{ s.check_in.strftime('%m/%d') }}-{{ s.check_out.strftime('%m/%d') }}
+                {% endif %}
+            </td>
+            <td>{{ s.scraped_at.strftime('%Y-%m-%d %H:%M') if s.scraped_at else "" }}</td>
+            <td>
+                <a href="/snapshots/{{ s.id }}" class="btn" style="padding:0.25rem 0.5rem; font-size:0.8rem;">Details</a>
+                <form method="post" action="/snapshots/{{ s.id }}/delete" style="display:inline;"
+                      onsubmit="return confirm('Delete snapshot #{{ s.id }}?');">
+                    <button type="submit" class="btn btn-danger" style="padding:0.25rem 0.5rem; font-size:0.8rem;">&times;</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}

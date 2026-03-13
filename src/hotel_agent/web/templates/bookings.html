@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Bookings{% endblock %}
+{% block topbar_title %}Bookings{% endblock %}
+{% block content %}
+<h1>Active Bookings ({{ bookings|length }})</h1>
+
+{% if not bookings %}
+<div class="alert-box alert-info">No active bookings. <a href="/import">Import from Excel</a> to get started.</div>
+{% else %}
+<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:1.25rem;">
+{% for item in bookings %}
+{% set b = item.booking %}
+{% set h = item.hotel %}
+<div class="card" style="padding:0; overflow:hidden;">
+    <!-- Header band -->
+    <div style="background:#1e293b; color:#fff; padding:.875rem 1.25rem; display:flex; align-items:center; justify-content:space-between;">
+        <div>
+            <div style="font-weight:700; font-size:1.05rem;">{{ h.name if h else "?" }}</div>
+            {% if h and h.city %}<div style="font-size:.8rem; color:#94a3b8;">{{ h.city }}{% if h.country %}, {{ h.country }}{% endif %}</div>{% endif %}
+        </div>
+        <div style="text-align:right;">
+            {% if b.is_cancellable %}<span class="badge badge-green" style="font-size:.65rem;">Cancellable</span>
+            {% else %}<span class="badge badge-red" style="font-size:.65rem;">Non-refundable</span>{% endif %}
+        </div>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:1rem 1.25rem;">
+        <!-- Dates row -->
+        <div style="display:flex; align-items:center; gap:1.5rem; margin-bottom:.875rem;">
+            <div>
+                <div style="font-size:.7rem; text-transform:uppercase; color:#64748b; letter-spacing:.04em;">Check-in</div>
+                <div style="font-weight:600;">{{ b.check_in or "?" }}</div>
+            </div>
+            <div style="color:#94a3b8; font-size:1.1rem;">&#8594;</div>
+            <div>
+                <div style="font-size:.7rem; text-transform:uppercase; color:#64748b; letter-spacing:.04em;">Check-out</div>
+                <div style="font-weight:600;">{{ b.check_out or "?" }}</div>
+            </div>
+            <div style="margin-left:auto; text-align:right;">
+                <div style="font-size:.7rem; text-transform:uppercase; color:#64748b; letter-spacing:.04em;">Nights</div>
+                <div style="font-weight:600;">{{ b.nights }}</div>
+            </div>
+        </div>
+
+        <!-- Price block -->
+        <div style="background:#f8fafc; border-radius:.375rem; padding:.75rem 1rem; margin-bottom:.875rem; display:flex; align-items:baseline; gap:1.5rem; flex-wrap:wrap;">
+            <div>
+                <span style="font-size:1.35rem; font-weight:700; color:#1e293b;">{{ "{:,.0f}".format(b.booked_price) }}</span>
+                <span style="font-size:.875rem; color:#64748b;">{{ b.currency }}</span>
+            </div>
+            <div style="font-size:.8rem; color:#64748b;">
+                {{ "{:,.0f}".format(b.price_per_night) }} {{ b.currency }} / night
+            </div>
+            <div style="margin-left:auto;">
+                <span style="font-size:.8rem; font-weight:500; color:#475569;">{{ b.platform }}</span>
+            </div>
+        </div>
+
+        <!-- Details grid -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem .75rem; font-size:.8125rem; margin-bottom:.875rem;">
+            <div><span style="color:#64748b;">Room:</span> {{ b.room_type or "Standard" }}</div>
+            <div><span style="color:#64748b;">Guests:</span> {{ b.travelers }}</div>
+            {% if b.booking_reference %}
+            <div><span style="color:#64748b;">Ref:</span> <code style="font-size:.75rem;">{{ b.booking_reference }}</code></div>
+            {% endif %}
+            {% if b.breakfast_included %}
+            <div><span style="color:#16a34a;">Breakfast included</span></div>
+            {% endif %}
+            {% if b.cancellation_deadline %}
+            <div><span style="color:#64748b;">Cancel by:</span> {{ b.cancellation_deadline }}</div>
+            {% endif %}
+        </div>
+
+        <!-- Footer: badges + actions -->
+        <div style="display:flex; align-items:center; gap:.75rem; padding-top:.625rem; border-top:1px solid #f1f5f9;">
+            {% if item.snapshot_count > 0 %}
+            <span class="badge badge-green">{{ item.snapshot_count }} price{{ "s" if item.snapshot_count != 1 else "" }}</span>
+            {% else %}
+            <span class="badge badge-yellow">No prices yet</span>
+            {% endif %}
+            <div style="margin-left:auto; display:flex; gap:.5rem;">
+                {% if b.booking_url %}
+                <a href="{{ b.booking_url }}" target="_blank" rel="noopener" class="btn btn-small" style="background:#e0e7ff; color:#3730a3;">View booking</a>
+                {% endif %}
+                <a href="/bookings/{{ b.id }}/edit" class="btn btn-small btn-primary">Edit</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

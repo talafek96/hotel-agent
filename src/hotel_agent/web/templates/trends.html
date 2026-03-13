@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% from "_macros.html" import platform_badge %}
+{% block title %}Trends{% endblock %}
+{% block topbar_title %}Price Trends{% endblock %}
+{% block content %}
+<h1>Price Trends</h1>
+
+{% if not charts %}
+<div class="alert-box alert-info">
+    No price data yet. <a href="/scrape">Run a scrape</a> to start collecting prices, then come back to see trends.
+</div>
+{% else %}
+
+<!-- Summary stats -->
+<div class="stats-grid" style="grid-template-columns:repeat(3, 1fr);">
+    <div class="stat-card">
+        <div class="stat-label">Hotels Tracked</div>
+        <div class="stat-number">{{ charts|length }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Total Snapshots</div>
+        <div class="stat-number">{% set ns_snap = namespace(total=0) %}{% for c in charts %}{% set ns_snap.total = ns_snap.total + c.history|length %}{% endfor %}{{ ns_snap.total }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Potential Savings</div>
+        <div class="stat-number" style="color:#16a34a;">
+            {% set ns = namespace(savings=0, currency='') %}
+            {% for c in charts %}
+                {% if c.best_price is not none and c.best_price < c.booking.booked_price %}
+                    {% set ns.savings = ns.savings + (c.booking.booked_price - c.best_price) %}
+                    {% set ns.currency = c.booking.currency %}
+                {% endif %}
+            {% endfor %}
+            {% if ns.savings > 0 %}
+                {{ "{:,.0f}".format(ns.savings) }} {{ ns.currency }}
+            {% else %}
+                --
+            {% endif %}
+        </div>
+        <div class="stat-sub">across all bookings (vs best current)</div>
+    </div>
+</div>
+
+<!-- Per-hotel comparison bar chart -->
+<div class="card">
+    <h2>Booked vs Best Current Price</h2>
+    <p style="font-size:.8125rem; color:#64748b; margin-bottom:1rem;">
+        Compares your booked price (dark) against the cheapest current price found (green). Red means the current price is higher than your booking.
+    </p>
+    <div style="max-height:400px;">
+        <canvas id="comparisonChart"></canvas>
+    </div>
+</div>
+
+<!-- Per-hotel price history charts -->
+{% for c in charts %}
+<div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.75rem;">
+        <div>
+            <h2 style="margin-bottom:0;">{{ c.hotel.name }}</h2>
+            <span style="font-size:.8125rem; color:#64748b;">{{ c.hotel.city }} | {{ c.booking.check_in }} to {{ c.booking.check_out }} ({{ c.booking.nights }} nights)</span>
+        </div>
+        <div style="text-align:right;">
+            <div style="font-size:.8rem; color:#64748b;">Booked</div>
+            <div style="font-weight:700;">{{ "{:,.0f}".format(c.booking.booked_price) }} {{ c.booking.currency }}</div>
+        </div>
+    </div>
+
+    <!-- Current prices table -->
+    {% if c.latest %}
+    <div style="margin-bottom:.75rem;">
+        <table style="font-size:.8125rem;">
+            <thead>
+                <tr>
+                    <th>Platform</th>
+                    <th>Current Price</th>
+                    <th>vs Booked</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for s in c.latest %}
+                {% set diff = c.booking.booked_price - s.price %}
+                {% set pct = (diff / c.booking.booked_price * 100) if c.booking.booked_price > 0 else 0 %}
+                <tr>
+                    <td>{{ platform_badge(s.platform, s.link) }}</td>
+                    <td><strong>{{ "{:,.0f}".format(s.price) }} {{ s.currency }}</strong></td>
+                    <td>
+                        {% if diff > 0 %}
+                        <span style="color:#16a34a; font-weight:600;">-{{ "{:.1f}".format(pct) }}% ({{ "{:,.0f}".format(diff) }} cheaper)</span>
+                        {% elif diff < 0 %}
+                        <span style="color:#dc2626; font-size:.8rem;">+{{ "{:,.0f}".format(-diff) }} more</span>
+                        {% else %}
+                        <span style="color:#64748b;">same</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- History chart -->
+    <div style="height:250px;">
+        <canvas id="chart-{{ c.booking.id }}"></canvas>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>
+{% if charts %}
+// Color palette for platforms
+var COLORS = [
+    '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
+    '#ec4899','#06b6d4','#84cc16','#f97316','#6366f1'
+];
+function pickColor(i) { return COLORS[i % COLORS.length]; }
+
+// ── Comparison bar chart ──
+(function() {
+    var labels = [];
+    var bookedData = [];
+    var bestData = [];
+    var bestColors = [];
+
+    {% for c in charts %}
+    labels.push('{{ c.hotel.name[:20] }}');
+    bookedData.push({{ c.booking.booked_price }});
+    {% if c.best_price is not none %}
+    bestData.push({{ c.best_price }});
+    bestColors.push({{ c.best_price }} <= {{ c.booking.booked_price }} ? '#16a34a' : '#dc2626');
+    {% else %}
+    bestData.push(0);
+    bestColors.push('#94a3b8');
+    {% endif %}
+    {% endfor %}
+
+    new Chart(document.getElementById('comparisonChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Booked Price',
+                    data: bookedData,
+                    backgroundColor: '#334155',
+                    borderRadius: 4,
+                },
+                {
+                    label: 'Best Current',
+                    data: bestData,
+                    backgroundColor: bestColors,
+                    borderRadius: 4,
+                },
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' },
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    ticks: {
+                        callback: function(v) { return v.toLocaleString(); }
+                    }
+                }
+            }
+        }
+    });
+})();
+
+// ── Per-hotel history line charts ──
+{% for c in charts %}
+(function() {
+    var datasets = [];
+    var colorIdx = 0;
+
+    // Booked price as dashed line
+    {% if c.history %}
+    var firstTs = '{{ c.history[0].scraped_at.isoformat() if c.history[0].scraped_at else "" }}';
+    var lastTs = '{{ c.history[-1].scraped_at.isoformat() if c.history[-1].scraped_at else "" }}';
+    datasets.push({
+        label: 'Booked ({{ c.booking.platform }})',
+        data: [{t: firstTs, y: {{ c.booking.booked_price }} }, {t: lastTs, y: {{ c.booking.booked_price }} }],
+        borderColor: '#94a3b8',
+        borderDash: [6, 3],
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        parsing: { xAxisKey: 't', yAxisKey: 'y' },
+    });
+    {% endif %}
+
+    // Group history by platform
+    var platforms = {};
+    {% for s in c.history %}
+    if (!platforms['{{ s.platform }}']) platforms['{{ s.platform }}'] = [];
+    platforms['{{ s.platform }}'].push({
+        t: '{{ s.scraped_at.isoformat() if s.scraped_at else "" }}',
+        y: {{ s.price }}
+    });
+    {% endfor %}
+
+    for (var plat in platforms) {
+        var color = pickColor(colorIdx++);
+        datasets.push({
+            label: plat,
+            data: platforms[plat],
+            borderColor: color,
+            backgroundColor: color + '20',
+            borderWidth: 2,
+            pointRadius: 3,
+            tension: 0.2,
+            fill: false,
+            parsing: { xAxisKey: 't', yAxisKey: 'y' },
+        });
+    }
+
+    new Chart(document.getElementById('chart-{{ c.booking.id }}'), {
+        type: 'line',
+        data: { datasets: datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 12 } },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            return ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString() + ' {{ c.booking.currency }}';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: { unit: 'day', tooltipFormat: 'MMM d, HH:mm' },
+                    title: { display: true, text: 'Scrape Date' }
+                },
+                y: {
+                    title: { display: true, text: 'Price ({{ c.booking.currency }})' },
+                    ticks: {
+                        callback: function(v) { return v.toLocaleString(); }
+                    }
+                }
+            }
+        }
+    });
+})();
+{% endfor %}
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "_macros.html" import platform_badge %}
+{% block title %}Scrape Run #{{ run.id }}{% endblock %}
+{% block topbar_title %}Scrape Detail{% endblock %}
+{% block content %}
+<h1>Scrape Run #{{ run.id }}</h1>
+
+<div class="card">
+    <table>
+        <tbody>
+            <tr><td><strong>Status</strong></td><td>
+                <span class="badge {% if run.status == 'completed' %}badge-green{% elif run.status == 'running' %}badge-yellow{% else %}badge-red{% endif %}">
+                    {{ run.status }}
+                </span>
+            </td></tr>
+            <tr><td><strong>Started</strong></td><td>{{ run.started_at }}</td></tr>
+            <tr><td><strong>Finished</strong></td><td>{{ run.finished_at or "—" }}</td></tr>
+            <tr><td><strong>Hotels</strong></td><td>{{ run.successful }}/{{ run.total_hotels }} OK{% if run.failed > 0 %}, {{ run.failed }} failed{% endif %}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+{% if run.details %}
+<div class="card">
+    <h2>Per-Hotel Results</h2>
+    {% for d in run.details %}
+    <div style="border:1px solid #e2e8f0; border-radius:.375rem; padding:.75rem 1rem; margin-bottom:.75rem;">
+        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <strong>{{ d.hotel }}</strong>
+            {% if d.status == 'ok' %}<span class="badge badge-green">OK</span>
+            {% elif d.status == 'no prices' %}<span class="badge badge-yellow">no prices</span>
+            {% else %}<span class="badge badge-red">{{ d.status[:60] }}</span>{% endif %}
+            <span style="color:#64748b; font-size:.8125rem;">{{ d.prices }} price{{ "s" if d.prices != 1 else "" }}</span>
+        </div>
+        {% if d.sources is defined and d.sources %}
+        <table style="margin-top:.5rem; font-size:.8125rem;">
+            <thead><tr><th>Source</th><th>Price</th></tr></thead>
+            <tbody>
+                {% for src in d.sources %}
+                <tr>
+                    <td>{{ platform_badge(src.platform, src.link|default("")) }}</td>
+                    <td><strong>{{ "{:,.0f}".format(src.price) }} {{ src.currency }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if run.errors %}
+<div class="card">
+    <h2>Errors</h2>
+    <ul style="margin:0 0 0 1rem; color:#991b1b; font-size:.875rem;">
+        {% for err in run.errors %}
+        <li>{{ err }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<a href="/scrapes" class="btn btn-primary">Back to Scrape History</a>
+{% endblock %}

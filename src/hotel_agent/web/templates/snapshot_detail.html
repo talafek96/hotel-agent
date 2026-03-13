@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_macros.html" import platform_badge %}
+{% block title %}Snapshot #{{ snapshot.id if snapshot else "?" }}{% endblock %}
+{% block topbar_title %}Snapshot Detail{% endblock %}
+{% block content %}
+{% if not snapshot %}
+<div class="alert-box alert-error">Snapshot not found.</div>
+{% else %}
+<h1>Snapshot #{{ snapshot.id }}</h1>
+
+<div class="card">
+    <table>
+        <tbody>
+            <tr><td><strong>Hotel</strong></td><td>{{ hotel.name if hotel else "Hotel #" ~ snapshot.hotel_id }}{% if hotel and hotel.city %} ({{ hotel.city }}){% endif %}</td></tr>
+            <tr><td><strong>Platform</strong></td><td>{{ platform_badge(snapshot.platform, snapshot.link) }}</td></tr>
+            <tr><td><strong>Room Type</strong></td><td>{{ snapshot.room_type }}</td></tr>
+            <tr><td><strong>Price</strong></td><td><strong>{{ "{:,.0f}".format(snapshot.price) }} {{ snapshot.currency }}</strong></td></tr>
+            {% if snapshot.check_in and snapshot.check_out %}
+            {% set nights = (snapshot.check_out - snapshot.check_in).days %}
+            <tr><td><strong>Dates</strong></td><td>{{ snapshot.check_in }} to {{ snapshot.check_out }} ({{ nights }} nights)</td></tr>
+            {% if nights > 0 %}
+            <tr><td><strong>Per Night</strong></td><td>{{ "{:,.0f}".format(snapshot.price / nights) }} {{ snapshot.currency }}</td></tr>
+            {% endif %}
+            {% endif %}
+            <tr><td><strong>Adults</strong></td><td>{{ snapshot.travelers.adults }}</td></tr>
+            {% if snapshot.travelers.children_ages %}
+            <tr><td><strong>Children</strong></td><td>{{ snapshot.travelers.children_ages|join(', ') }}</td></tr>
+            {% endif %}
+            {% if snapshot.is_cancellable is not none %}
+            <tr><td><strong>Cancellable</strong></td><td>{% if snapshot.is_cancellable %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-red">No</span>{% endif %}</td></tr>
+            {% endif %}
+            {% if snapshot.cancellation_deadline %}
+            <tr><td><strong>Cancel By</strong></td><td>{{ snapshot.cancellation_deadline }}</td></tr>
+            {% endif %}
+            {% if snapshot.breakfast_included is not none %}
+            <tr><td><strong>Breakfast</strong></td><td>{% if snapshot.breakfast_included %}<span class="badge badge-green">Included</span>{% else %}Not included{% endif %}</td></tr>
+            {% endif %}
+            {% if snapshot.bathroom_type %}
+            <tr><td><strong>Bathroom</strong></td><td>{{ snapshot.bathroom_type }}</td></tr>
+            {% endif %}
+            {% if snapshot.amenities %}
+            <tr><td><strong>Amenities</strong></td><td>{{ snapshot.amenities|join(', ') }}</td></tr>
+            {% endif %}
+            {% if snapshot.screenshot_path %}
+            <tr><td><strong>Screenshot</strong></td><td><code>{{ snapshot.screenshot_path }}</code></td></tr>
+            {% endif %}
+            {% if snapshot.scraped_at %}
+            <tr><td><strong>Scraped At</strong></td><td>{{ snapshot.scraped_at }}</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<a href="/snapshots" class="btn btn-primary">Back to Snapshots</a>
+<form method="post" action="/snapshots/{{ snapshot.id }}/delete" style="display:inline;"
+      onsubmit="return confirm('Delete snapshot #{{ snapshot.id }} and its alerts?');">
+    <button type="submit" class="btn btn-danger">Delete Snapshot</button>
+</form>
+{% endif %}
+{% endblock %}

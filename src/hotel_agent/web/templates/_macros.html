@@ -1,0 +1,13 @@
+{# Render a platform name as a clickable badge linking to the booking site.
+   If the snapshot has a direct booking link, that takes priority.
+   Otherwise falls back to the platform homepage.
+   If neither is available, renders plain text. #}
+{% macro platform_badge(name, link="") %}
+{%- set url = link if link else platform_url(name) -%}
+{%- if url -%}
+<a href="{{ url }}" target="_blank" rel="noopener" style="text-decoration:none;">
+    <span class="badge badge-blue">{{ name }}</span></a>
+{%- else -%}
+<span class="badge badge-blue">{{ name }}</span>
+{%- endif -%}
+{% endmacro %}

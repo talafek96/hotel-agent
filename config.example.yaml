@@ -1,0 +1,48 @@
+# Hotel Agent Configuration
+# Copy this file to config.yaml and adjust to your needs:
+#   cp config.example.yaml config.yaml
+
+# Default traveler composition for all bookings
+# Override per-booking in the Excel or via CLI
+travelers:
+  adults: 2
+  children: []
+  # children: [4, 7]    # uncomment and set your children's ages
+
+# LLM settings
+llm:
+  # Provider: "openai", "gemini", "anthropic"
+  provider: "openai"
+  # Model name (use the config UI "Load models" button to see available options)
+  model: "gpt-4o-mini"
+
+# Currency settings
+currency:
+  # Your home currency for comparisons
+  base: "USD"
+  # Conversion rates — add any pair you need as <FROM>_to_<BASE>
+  rates:
+    # JPY_to_USD: 0.0067
+    # EUR_to_USD: 1.08
+
+# Alert thresholds (in base currency)
+alerts:
+  price_drop:
+    min_absolute: 10       # Minimum savings to trigger alert
+    min_percentage: 5      # Minimum savings percentage
+  upgrade:
+    max_extra_cost: 50     # Max extra cost for an upgrade alert
+    max_extra_percentage: 10
+  only_cancellable: false  # Only alert about cancellable rooms
+
+# Notifications
+notifications:
+  telegram:
+    enabled: false
+  email:
+    enabled: false
+    digest_time: "08:00"
+
+# Database
+database:
+  path: "data/hotel_tracker.db"

@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% from "_macros.html" import platform_badge %}
+{% block title %}Scrape{% endblock %}
+{% block topbar_title %}Fetch Prices{% endblock %}
+{% block content %}
+<h1>Fetch Hotel Prices (SerpAPI)</h1>
+
+<!-- Progress panel (hidden by default, shown by JS while scrape runs) -->
+<div id="progress-panel" style="display:none;">
+    <div class="card">
+        <h2 id="progress-title">Scraping...</h2>
+        <div style="background:#e2e8f0;border-radius:.375rem;height:1.25rem;overflow:hidden;margin:.75rem 0;">
+            <div id="progress-bar"
+                 style="height:100%;background:#3b82f6;border-radius:.375rem;transition:width .3s;width:0%;">
+            </div>
+        </div>
+        <p id="progress-text" style="font-size:.875rem;color:#475569;">Starting...</p>
+    </div>
+
+    <!-- Live results table -->
+    <div class="card" id="live-results" style="display:none;">
+        <h2>Results</h2>
+        <table>
+            <thead>
+                <tr><th>Hotel</th><th>Sources</th><th>Prices Found</th><th>Status</th></tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+        </table>
+    </div>
+
+    <!-- Errors -->
+    <div id="error-box" class="alert-box alert-error" style="display:none;"></div>
+</div>
+
+<!-- Fetch form (hidden while scrape runs) -->
+<div id="scrape-form" class="card">
+    <h2>Fetch Prices</h2>
+    <form method="post">
+        <div class="form-group">
+            <label for="hotel_filter">Hotel Name Filter (optional)</label>
+            <input type="text" id="hotel_filter" name="hotel_filter" placeholder="Leave empty to fetch all hotels">
+        </div>
+        <button type="submit" class="btn btn-primary" id="scrape-btn">Fetch Prices</button>
+    </form>
+</div>
+
+{% if hotels %}
+<div class="card">
+    <h2>Tracked Hotels ({{ hotels|length }})</h2>
+    <table>
+        <thead><tr><th>Name</th><th>City</th><th>Platform</th></tr></thead>
+        <tbody>
+            {% for h in hotels %}
+            <tr><td>{{ h.name }}</td><td>{{ h.city }}</td><td>{{ h.platform }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<script>
+(function() {
+    var PLATFORM_URLS = {{ platform_urls_json | safe }};
+    var polling = false;
+    var timer = null;
+
+    function platformBadge(name, link) {
+        var url = link || PLATFORM_URLS[(name || "").toLowerCase()] || "";
+        var badge = '<span class="badge badge-blue">' + esc(name) + '</span>';
+        if (url) {
+            return '<a href="' + esc(url) + '" target="_blank" rel="noopener" style="text-decoration:none;">' + badge + '</a>';
+        }
+        return badge;
+    }
+
+    function esc(s) {
+        var d = document.createElement("div");
+        d.textContent = s || "";
+        return d.innerHTML;
+    }
+
+    function statusBadge(st) {
+        if (st === "ok") return '<span class="badge badge-green">OK</span>';
+        if (st === "no prices") return '<span class="badge badge-yellow">no prices</span>';
+        return '<span class="badge badge-red">' + esc(st) + '</span>';
+    }
+
+    function renderResults(results) {
+        if (!results || !results.length) {
+            document.getElementById("live-results").style.display = "none";
+            return;
+        }
+        document.getElementById("live-results").style.display = "";
+        var html = "";
+        for (var i = 0; i < results.length; i++) {
+            var r = results[i];
+            var srcHtml = "";
+            if (r.sources && r.sources.length) {
+                for (var j = 0; j < r.sources.length; j++) {
+                    srcHtml += platformBadge(r.sources[j].platform, r.sources[j].link || "") + " ";
+                }
+            } else {
+                srcHtml = '<span class="badge badge-blue">' + esc(r.provider) + '</span>';
+            }
+            html += "<tr><td>" + esc(r.hotel) + "</td><td>" + srcHtml + "</td><td>" + r.prices + "</td><td>" + statusBadge(r.status) + "</td></tr>";
+        }
+        document.getElementById("results-body").innerHTML = html;
+    }
+
+    function poll() {
+        fetch("/api/scrape/status")
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                var pct = data.total > 0 ? Math.round(data.completed / data.total * 100) : 0;
+                document.getElementById("progress-bar").style.width = pct + "%";
+
+                if (data.running) {
+                    var msg = data.completed + " / " + data.total + " hotels";
+                    if (data.current_hotel) msg += " — fetching " + data.current_hotel + "...";
+                    document.getElementById("progress-text").textContent = msg;
+                    document.getElementById("progress-title").textContent = "Scraping... (" + pct + "%)";
+                } else {
+                    document.getElementById("progress-bar").style.width = "100%";
+                    document.getElementById("progress-bar").style.background = "#22c55e";
+                    document.getElementById("progress-title").textContent = "Scrape Complete";
+                    document.getElementById("progress-text").textContent =
+                        data.successful + "/" + data.total + " successful, " + data.failed + " failed";
+                    document.getElementById("scrape-btn").disabled = false;
+                    if (data.run_id) {
+                        document.getElementById("progress-text").innerHTML +=
+                            ' — <a href="/scrapes/' + data.run_id + '">View run details</a>';
+                    }
+                    polling = false;
+                }
+
+                renderResults(data.results);
+
+                if (data.errors && data.errors.length) {
+                    document.getElementById("error-box").style.display = "";
+                    document.getElementById("error-box").textContent = data.errors.join("; ");
+                }
+
+                if (polling) timer = setTimeout(poll, 1500);
+            })
+            .catch(function() {
+                if (polling) timer = setTimeout(poll, 3000);
+            });
+    }
+
+    // Check on page load whether a scrape is already running
+    fetch("/api/scrape/status")
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.running) {
+                document.getElementById("progress-panel").style.display = "";
+                document.getElementById("scrape-btn").disabled = true;
+                polling = true;
+                timer = setTimeout(poll, 1000);
+            }
+        });
+
+    // On form submit, show progress panel immediately
+    var form = document.querySelector("#scrape-form form");
+    if (form) {
+        form.addEventListener("submit", function() {
+            document.getElementById("scrape-btn").disabled = true;
+            // Show progress after a short delay (redirect needs to complete)
+            setTimeout(function() {
+                document.getElementById("progress-panel").style.display = "";
+                document.getElementById("progress-bar").style.width = "0%";
+                document.getElementById("progress-bar").style.background = "#3b82f6";
+                document.getElementById("progress-title").textContent = "Scraping...";
+                document.getElementById("progress-text").textContent = "Starting...";
+                document.getElementById("results-body").innerHTML = "";
+                document.getElementById("error-box").style.display = "none";
+                document.getElementById("live-results").style.display = "none";
+                polling = true;
+                poll();
+            }, 500);
+        });
+    }
+})();
+</script>
+{% endblock %}
