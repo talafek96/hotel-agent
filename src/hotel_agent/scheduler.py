@@ -246,20 +246,33 @@ class Scheduler:
             self._sched.next_run_at = next_dt.isoformat()
             self.save_state()
 
-            # Sleep until next run (interruptible)
-            wait_seconds = max(0, (next_dt - datetime.now()).total_seconds())
+            # Calculate wakeup: min of next pipeline run and next digest time
+            wakeup = next_dt
+            digest_due = self._next_digest_time()
+            if digest_due and digest_due < wakeup:
+                wakeup = digest_due
+
+            wait_seconds = max(0, (wakeup - datetime.now()).total_seconds())
             if wait_seconds > 0:
-                log.debug("Scheduler sleeping %.0f seconds until %s", wait_seconds, next_dt)
+                log.debug("Scheduler sleeping %.0f seconds until %s", wait_seconds, wakeup)
                 if self._stop_event.wait(timeout=wait_seconds):
-                    break  # stop() was called
+                    break
 
             if self._stop_event.is_set():
                 break
 
+            # Always check digest first (independent of pipeline)
+            self._maybe_send_digest()
+
+            # Only run pipeline if it's actually time
+            now = datetime.now()
+            if now < next_dt - timedelta(seconds=5):
+                # Woke up for digest, not pipeline — loop back
+                continue
+
             # Try to acquire pipeline lock
             if not pipeline_lock.acquire(blocking=False):
                 log.info("Scheduler: pipeline busy, skipping this cycle")
-                # Wait a bit then try next cycle
                 self._stop_event.wait(timeout=60)
                 continue
 
@@ -288,7 +301,7 @@ class Scheduler:
                 if self._on_run_end:
                     self._on_run_end(summary)
 
-                # Check if digest email is due
+                # Re-check digest after pipeline (may have generated new alerts)
                 self._maybe_send_digest()
 
             except Exception:
@@ -298,8 +311,29 @@ class Scheduler:
             finally:
                 pipeline_lock.release()
 
-            # Small delay before computing next cycle
             time.sleep(1)
+
+    def _next_digest_time(self) -> datetime | None:
+        """Return the next digest send time, or None if digest is disabled."""
+        if not self._app_config.notifications.email.digest_enabled:
+            return None
+
+        now = datetime.now()
+        h, m = _parse_time(self._app_config.notifications.email.digest_time)
+        today_at = now.replace(hour=h, minute=m, second=0, microsecond=0)
+
+        # Already sent today?
+        if self._sched.last_digest_at:
+            last = datetime.fromisoformat(self._sched.last_digest_at)
+            if last.date() >= now.date():
+                # Next digest is tomorrow
+                return today_at + timedelta(days=1)
+
+        # Haven't sent today — is digest time still ahead?
+        if today_at > now:
+            return today_at
+        # Digest time already passed and we haven't sent — due now
+        return now
 
     def _maybe_send_digest(self) -> None:
         """Send a digest email if the configured digest time has passed since the last digest."""
@@ -312,6 +346,11 @@ class Scheduler:
 
         # Only send if we're past the digest time today
         if now < digest_time_today:
+            log.debug(
+                "Scheduler: digest not due yet (now=%s, due=%s)",
+                now.strftime("%H:%M"),
+                f"{h:02d}:{m:02d}",
+            )
             return
 
         # Only send once per day
@@ -319,6 +358,12 @@ class Scheduler:
             last = datetime.fromisoformat(self._sched.last_digest_at)
             if last.date() >= now.date():
                 return
+
+        log.info(
+            "Scheduler: digest email is due (time=%s, last=%s)",
+            f"{h:02d}:{m:02d}",
+            self._sched.last_digest_at or "never",
+        )
 
         # Get alerts since last digest
         since = self._sched.last_digest_at or (now - timedelta(days=1)).isoformat()
