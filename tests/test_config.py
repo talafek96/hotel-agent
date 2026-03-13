@@ -23,7 +23,8 @@ class TestDefaultConfig:
     """Tests for default configuration values."""
 
     def test_default_app_config(self):
-        cfg = AppConfig(_env_file=None)
+        with patch.dict(os.environ, {}, clear=True):
+            cfg = AppConfig(_env_file=None)
         assert cfg.db_path == "data/hotel_tracker.db"
         assert cfg.travelers.adults == 2
         assert cfg.travelers.children_ages == []

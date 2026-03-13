@@ -95,7 +95,7 @@ class AppConfig(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=None,  # We use load_dotenv() instead; set _env_file=".env" if using standalone
         env_file_encoding="utf-8",
         extra="ignore",
         arbitrary_types_allowed=True,
@@ -232,18 +232,56 @@ _SECRET_ENV_MAP = {
 
 
 def save_secrets(config: AppConfig, env_path: Path | str = Path(".env")) -> None:
-    """Write secret values to a .env file and update os.environ."""
+    """Update secret values in a .env file and os.environ.
+
+    Reads the existing file first so comments and unmanaged variables
+    are preserved.
+    """
     path = Path(env_path)
 
-    lines: list[str] = []
+    # Read existing lines (preserve comments, blank lines, unknown vars)
+    existing_lines: list[str] = []
+    if path.exists():
+        existing_lines = path.read_text(encoding="utf-8").splitlines()
+
+    # Build a map of env_var -> new value for managed secrets
+    managed_keys = set(_SECRET_ENV_MAP.values())
+    new_values: dict[str, str] = {}
     for attr, env_var in _SECRET_ENV_MAP.items():
         secret: SecretStr = getattr(config, attr)
         value = secret.get_secret_value()
+        new_values[env_var] = value
         if value:
-            lines.append(f"{env_var}={value}")
             os.environ[env_var] = value
         else:
             os.environ.pop(env_var, None)
 
-    path.write_text("\n".join(lines) + "\n" if lines else "", encoding="utf-8")
+    # Update existing lines in-place, track which managed keys were written
+    written: set[str] = set()
+    output: list[str] = []
+    for line in existing_lines:
+        stripped = line.strip()
+        # Skip empty / comment lines — keep them
+        if not stripped or stripped.startswith("#"):
+            output.append(line)
+            continue
+        # Parse KEY=VALUE
+        if "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in managed_keys:
+                value = new_values.get(key, "")
+                if value:
+                    output.append(f"{key}={value}")
+                # If empty, drop the line (remove the key)
+                written.add(key)
+                continue
+        # Unknown line — keep it
+        output.append(line)
+
+    # Append any managed keys that weren't already in the file
+    for env_var in _SECRET_ENV_MAP.values():
+        if env_var not in written and new_values.get(env_var, ""):
+            output.append(f"{env_var}={new_values[env_var]}")
+
+    path.write_text("\n".join(output) + "\n" if output else "", encoding="utf-8")
     log.info("Secrets saved to %s", path)
