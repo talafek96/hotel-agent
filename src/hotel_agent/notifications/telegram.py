@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 import requests
 
@@ -11,7 +12,6 @@ from ..models import Alert
 
 log = logging.getLogger(__name__)
 
-# Severity to emoji mapping
 _SEVERITY_EMOJI = {
     "urgent": "🔴",
     "important": "🟡",
@@ -59,39 +59,27 @@ def send_telegram_message(
         return False
 
 
-def format_alert_message(alert: Alert) -> str:
-    """Format an alert as an HTML message for Telegram.
+def _format_single_alert(alert: Alert) -> str:
+    """Format one alert as a compact section for the consolidated message."""
+    sev = _SEVERITY_EMOJI.get(alert.severity, "")
+    typ = _ALERT_TYPE_EMOJI.get(alert.alert_type, "")
 
-    Uses the structured details list if available for rich per-vendor info.
-    """
-    severity_emoji = _SEVERITY_EMOJI.get(alert.severity, "")
-    type_emoji = _ALERT_TYPE_EMOJI.get(alert.alert_type, "")
-
-    lines = [
-        f"{severity_emoji}{type_emoji} <b>{alert.title}</b>",
-        "",
-    ]
+    lines = [f"{sev}{typ} <b>{alert.title}</b>"]
 
     if alert.details:
-        # Structured consolidated alert
-        header_lines = alert.message.split("\n")
-        # Add header lines (hotel name, your price, dates) up to the vendor list
-        for line in header_lines:
+        # Extract header info from the plain message
+        for line in alert.message.split("\n"):
             if line.startswith("  - "):
                 break
-            if ": " in line:
+            if "Your price:" in line or "Dates:" in line:
                 key, value = line.split(": ", 1)
-                lines.append(f"<b>{key}:</b> {value}")
-            elif line.strip():
-                lines.append(line)
-            else:
-                lines.append("")
+                lines.append(f"  {key}: {value}")
 
-        # Add detailed vendor list from structured data
+        # Vendor list — compact
         for d in alert.details:
-            cancel_icon = "✅" if d.get("is_cancellable") else ""
-            bfast_icon = "🍳" if d.get("breakfast_included") else ""
-            icons = f" {cancel_icon}{bfast_icon}".rstrip()
+            cancel = "✅" if d.get("is_cancellable") else ""
+            bfast = "🍳" if d.get("breakfast_included") else ""
+            icons = f"{cancel}{bfast}".strip()
             room = d.get("room_type") or "Standard"
             pct = d.get("percentage_diff", 0)
             link = d.get("link", "")
@@ -100,44 +88,92 @@ def format_alert_message(alert: Alert) -> str:
             if link:
                 platform = f'<a href="{link}">{platform}</a>'
 
-            line = f"  • <b>{platform}</b>: {d['price']:,.0f} {d['currency']} ({pct:+.1f}%)"
-            line += f"\n    {room}{icons}"
-
-            amenities = d.get("amenities", [])
-            if amenities:
-                line += f"\n    {', '.join(amenities[:3])}"
+            line = f"  • {platform}: <b>{d['price']:,.0f} {d['currency']}</b> ({pct:+.1f}%)"
+            extras = " | ".join(filter(None, [room, icons]))
+            if extras:
+                line += f" — {extras}"
 
             deadline = d.get("cancellation_deadline", "")
             if deadline:
-                line += f"\n    Cancel by: {deadline}"
+                line += f" (cancel by {deadline})"
 
             lines.append(line)
     else:
-        # Legacy format: plain text message
+        # Plain text fallback
         for line in alert.message.split("\n"):
-            if ": " in line:
-                key, value = line.split(": ", 1)
-                lines.append(f"<b>{key}:</b> {value}")
-            else:
-                lines.append(line)
+            if line.strip():
+                lines.append(f"  {line.strip()}")
 
     return "\n".join(lines)
 
 
+def format_consolidated_message(alerts: list[Alert]) -> str:
+    """Format all alerts into a single consolidated Telegram message."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    urgent = [a for a in alerts if a.severity == "urgent"]
+    important = [a for a in alerts if a.severity == "important"]
+    info = [a for a in alerts if a.severity == "info"]
+
+    lines = [
+        f"🏨 <b>Hotel Price Tracker</b> — {now}",
+        f"📊 <b>{len(alerts)} alert{'s' if len(alerts) != 1 else ''}</b>",
+    ]
+
+    if urgent:
+        lines.append(f"  🔴 {len(urgent)} urgent")
+    if important:
+        lines.append(f"  🟡 {len(important)} important")
+    if info:
+        lines.append(f"  🔵 {len(info)} info")
+
+    lines.append("")
+
+    # Group alerts by severity (urgent first)
+    ordered = urgent + important + info
+    for i, alert in enumerate(ordered):
+        if i > 0:
+            lines.append("")
+        lines.append(_format_single_alert(alert))
+
+    return "\n".join(lines)
+
+
+def format_alert_message(alert: Alert) -> str:
+    """Format a single alert as an HTML message for Telegram."""
+    return _format_single_alert(alert)
+
+
 def notify_alerts(config: AppConfig, alerts: list[Alert]) -> int:
-    """Send alert notifications via Telegram. Returns count of sent messages."""
+    """Send alert notifications via Telegram.
+
+    Sends all pending alerts as a single consolidated message.
+    Returns the count of alerts included in the message.
+    """
     if not config.notifications.telegram.enabled:
         return 0
 
-    sent = 0
-    for alert in alerts:
-        if alert.notified_telegram:
-            continue
-        msg = format_alert_message(alert)
+    pending = [a for a in alerts if not a.notified_telegram]
+    if not pending:
+        return 0
+
+    msg = format_consolidated_message(pending)
+
+    # Telegram has a 4096 char limit — split if needed
+    if len(msg) <= 4096:
         if send_telegram_message(config, msg):
+            log.info("Sent consolidated Telegram notification (%d alerts)", len(pending))
+            return len(pending)
+        return 0
+
+    # Message too long — send in chunks by alert
+    sent = 0
+    for alert in pending:
+        single = _format_single_alert(alert)
+        if send_telegram_message(config, single):
             sent += 1
 
     if sent > 0:
-        log.info(f"Sent {sent} Telegram notifications")
+        log.info("Sent %d individual Telegram notifications (message too long for single)", sent)
 
     return sent
