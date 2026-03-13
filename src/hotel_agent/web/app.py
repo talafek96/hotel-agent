@@ -990,8 +990,8 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
     @app.post("/api/test-telegram")
     async def test_telegram():
-        """Send a test Telegram notification with recent alerts."""
-        from ..notifications.telegram import send_telegram_message
+        """Send a test Telegram notification with un-notified alerts."""
+        from ..notifications.telegram import _build_messages, send_telegram_message
 
         token = config.telegram_bot_token.get_secret_value()
         chat_id = config.telegram_chat_id.get_secret_value()
@@ -1006,36 +1006,39 @@ def create_app(config_path: str | None = None) -> FastAPI:
         with get_db() as db:
             alerts = db.get_unsent_telegram_alerts()
 
-        if not alerts:
-            # No alerts — send a simple test message
-            ok = send_telegram_message(
-                config, "🏨 <b>Hotel Price Tracker</b>\n\n✅ Test message — Telegram is working!"
-            )
-            if ok:
-                return JSONResponse(
-                    {
-                        "success": True,
-                        "alerts": 0,
-                        "message": "Test message sent (no alerts to show)",
-                    }
+            if not alerts:
+                # No alerts — send a simple test message
+                ok = send_telegram_message(
+                    config,
+                    "🏨 <b>Hotel Price Tracker</b>\n\n✅ Test message — Telegram is working!",
                 )
+                if ok:
+                    return JSONResponse(
+                        {
+                            "success": True,
+                            "alerts": 0,
+                            "message": "Test message sent (no un-notified alerts)",
+                        }
+                    )
+                return JSONResponse(
+                    {"success": False, "error": "Telegram API call failed (check server logs)"}
+                )
+
+            messages = _build_messages(alerts)
+            sent = 0
+            for msg in messages:
+                if send_telegram_message(config, msg):
+                    sent += 1
+
+            if sent == len(messages):
+                # Mark all alerts as notified via Telegram
+                for a in alerts:
+                    if a.id:
+                        db.mark_alert_notified(a.id, "telegram")
+                return JSONResponse({"success": True, "alerts": len(alerts), "messages": sent})
             return JSONResponse(
-                {"success": False, "error": "Telegram API call failed (check server logs)"}
+                {"success": False, "error": f"Sent {sent}/{len(messages)} messages — some failed"},
             )
-
-        from ..notifications.telegram import _build_messages
-
-        messages = _build_messages(alerts)
-        sent = 0
-        for msg in messages:
-            if send_telegram_message(config, msg):
-                sent += 1
-
-        if sent == len(messages):
-            return JSONResponse({"success": True, "alerts": len(alerts), "messages": sent})
-        return JSONResponse(
-            {"success": False, "error": f"Sent {sent}/{len(messages)} messages — some failed"},
-        )
 
     # ── Check (price comparison) ───────────────────
     @app.get("/check", response_class=HTMLResponse)
