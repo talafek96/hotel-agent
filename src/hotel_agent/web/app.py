@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json as json_mod
 import logging
 import os
@@ -795,7 +796,60 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "digest_time": digest_cfg.digest_time,
                 "last_digest_at": cfg.last_digest_at,
                 "next_digest_at": next_digest,
+                "last_digest_status": cfg.last_digest_status,
+                "last_digest_alerts": cfg.last_digest_alerts,
             }
+        )
+
+    @app.post("/api/scheduler/test-digest")
+    async def scheduler_test_digest():
+        """Send a test digest email immediately (ignores timing/enabled checks)."""
+        from ..notifications.email import send_digest_email
+
+        with get_db() as db:
+            # Get alerts from last 7 days for testing
+            from datetime import datetime, timedelta
+
+            since = (datetime.now() - timedelta(days=7)).isoformat()
+            alerts = db.get_alerts_since(since)
+
+        if not alerts:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "No alerts in the last 7 days to include in test digest",
+                },
+            )
+
+        # Generate summary
+        summary = ""
+        with contextlib.suppress(Exception):
+            summary = scheduler._generate_digest_summary(alerts)
+
+        recipients = config.notifications.email.recipients
+        gmail_user = config.gmail_user.get_secret_value()
+        gmail_pass = config.gmail_app_password.get_secret_value()
+
+        if not gmail_user or not gmail_pass:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "Gmail credentials not configured (set GMAIL_USER and GMAIL_APP_PASSWORD in Config > Secrets)",
+                },
+            )
+        if not recipients:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "No email recipients configured (set in Config > Notifications > Recipients)",
+                },
+            )
+
+        ok = send_digest_email(config, alerts, summary=summary)
+        if ok:
+            return JSONResponse({"success": True, "alerts": len(alerts), "recipients": recipients})
+        return JSONResponse(
+            {"success": False, "error": "Email send failed (check server logs for SMTP details)"},
         )
 
     # ── Check (price comparison) ───────────────────

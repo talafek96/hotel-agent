@@ -60,6 +60,8 @@ class ScheduleConfig:
     last_run_at: str = ""
     next_run_at: str = ""
     last_digest_at: str = ""
+    last_digest_status: str = ""  # "sent (N alerts)" | "skipped: no alerts" | "failed: ..." | ""
+    last_digest_alerts: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -374,6 +376,8 @@ class Scheduler:
             if not alerts:
                 log.info("Scheduler: no alerts since last digest, skipping")
                 self._sched.last_digest_at = now.isoformat()
+                self._sched.last_digest_status = "skipped: no new alerts"
+                self._sched.last_digest_alerts = 0
                 self.save_state()
                 return
 
@@ -384,14 +388,24 @@ class Scheduler:
 
             if send_digest_email(self._app_config, alerts, summary=summary):
                 log.info("Scheduler: digest email sent with %d alerts", len(alerts))
+                self._sched.last_digest_status = f"sent ({len(alerts)} alerts)"
+                self._sched.last_digest_alerts = len(alerts)
             else:
                 log.warning("Scheduler: digest email failed")
+                self._sched.last_digest_status = (
+                    "failed: email send returned false (check Gmail credentials and recipients)"
+                )
+                self._sched.last_digest_alerts = 0
 
             self._sched.last_digest_at = now.isoformat()
             self.save_state()
 
-        except Exception:
+        except Exception as exc:
             log.exception("Scheduler: digest email crashed")
+            self._sched.last_digest_status = f"failed: {str(exc)[:120]}"
+            self._sched.last_digest_alerts = 0
+            self._sched.last_digest_at = now.isoformat()
+            self.save_state()
 
     def _generate_digest_summary(self, alerts: list) -> str:
         """Use LLM to generate a brief summary of the alerts for the digest."""

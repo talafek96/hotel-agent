@@ -203,15 +203,49 @@
         if (data.last_digest_at) {
             parts.push('<div>Last digest: <strong>' + data.last_digest_at.substring(0,19) + '</strong></div>');
         }
+        if (data.last_digest_status) {
+            var isOk = data.last_digest_status.startsWith('sent');
+            var isSkip = data.last_digest_status.startsWith('skipped');
+            var color = isOk ? '#6ee7b7' : (isSkip ? 'rgba(255,255,255,.5)' : '#fca5a5');
+            parts.push('<div>Result: <strong style="color:' + color + ';">' + data.last_digest_status + '</strong></div>');
+        }
         if (data.next_digest_at) {
             parts.push('<div>Next digest: <strong>' + data.next_digest_at.substring(0,19) + '</strong></div>');
         }
         if (!data.active) {
             parts.push('<div style="color:#fca5a5;">Scheduler must be running for digest to send</div>');
         }
+        parts.push('<div style="margin-top:.5rem;"><button onclick="testDigest(this)" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);padding:.35rem .85rem;border-radius:.375rem;font-size:.75rem;font-weight:600;cursor:pointer;">Send Test Digest</button> <span id="digest-test-result" style="font-size:.75rem;margin-left:.5rem;"></span></div>');
         el.innerHTML = parts.join('');
     });
 })();
+
+function testDigest(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    var resultEl = document.getElementById('digest-test-result');
+    resultEl.textContent = '';
+
+    fetch('/api/scheduler/test-digest', {method:'POST'})
+        .then(function(r){return r.json()})
+        .then(function(data) {
+            btn.disabled = false;
+            btn.textContent = 'Send Test Digest';
+            if (data.success) {
+                resultEl.style.color = '#6ee7b7';
+                resultEl.textContent = 'Sent! (' + data.alerts + ' alerts to ' + data.recipients.join(', ') + ')';
+            } else {
+                resultEl.style.color = '#fca5a5';
+                resultEl.textContent = data.error;
+            }
+        })
+        .catch(function(e) {
+            btn.disabled = false;
+            btn.textContent = 'Send Test Digest';
+            resultEl.style.color = '#fca5a5';
+            resultEl.textContent = 'Request failed: ' + e.message;
+        });
+}
 </script>
 
 {% if saved %}
