@@ -148,6 +148,20 @@
         <textarea id="notif_email_recipients" name="notif_email_recipients" rows="2"
                   placeholder="user@example.com">{{ config.notifications.email.recipients | join('\n') }}</textarea>
     </div>
+
+    <h3 style="font-size:.875rem; margin-top:1.25rem; padding-top:1rem; border-top:1px solid #e2e8f0;">Test Notifications</h3>
+    <p style="font-size:.8rem; color:#64748b; margin-bottom:.75rem;">
+        Send a test notification to verify your setup works. Uses recent alerts from the database.
+    </p>
+    <div style="display:flex; gap:.75rem; flex-wrap:wrap; align-items:center;">
+        <button type="button" class="btn btn-primary btn-small" onclick="testTelegram(this)">
+            Send Test Telegram
+        </button>
+        <button type="button" class="btn btn-small" style="background:#d97706; color:#fff;" onclick="testDigest(this)">
+            Send Test Digest Email
+        </button>
+        <span id="test-notif-result" style="font-size:.8rem;"></span>
+    </div>
 </div>
 
 <div class="card">
@@ -263,6 +277,45 @@ async function fetchModels() {
         btn.disabled = false;
         btn.textContent = 'Load models';
     }
+}
+
+function _showTestResult(el, data) {
+    if (data.success) {
+        el.style.color = '#16a34a';
+        var msg = 'Sent!';
+        if (data.alerts) msg += ' (' + data.alerts + ' alerts)';
+        if (data.recipients) msg += ' to ' + data.recipients.join(', ');
+        if (data.messages) msg += ' in ' + data.messages + ' message(s)';
+        if (data.message) msg += ' — ' + data.message;
+        el.textContent = msg;
+    } else {
+        el.style.color = '#dc2626';
+        el.textContent = data.error || 'Unknown error';
+    }
+}
+
+function testTelegram(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    var el = document.getElementById('test-notif-result');
+    el.textContent = '';
+    fetch('/api/test-telegram', {method: 'POST'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) { _showTestResult(el, data); })
+        .catch(function(e) { el.style.color = '#dc2626'; el.textContent = e.message; })
+        .finally(function() { btn.disabled = false; btn.textContent = 'Send Test Telegram'; });
+}
+
+function testDigest(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    var el = document.getElementById('test-notif-result');
+    el.textContent = '';
+    fetch('/api/scheduler/test-digest', {method: 'POST'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) { _showTestResult(el, data); })
+        .catch(function(e) { el.style.color = '#dc2626'; el.textContent = e.message; })
+        .finally(function() { btn.disabled = false; btn.textContent = 'Send Test Digest Email'; });
 }
 </script>
 {% endblock %}

@@ -978,6 +978,55 @@ def create_app(config_path: str | None = None) -> FastAPI:
             {"success": False, "error": "Email send failed (check server logs for SMTP details)"},
         )
 
+    @app.post("/api/test-telegram")
+    async def test_telegram():
+        """Send a test Telegram notification with recent alerts."""
+        from ..notifications.telegram import send_telegram_message
+
+        token = config.telegram_bot_token.get_secret_value()
+        chat_id = config.telegram_chat_id.get_secret_value()
+        if not token or not chat_id:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "Telegram not configured (set BOT_TOKEN and CHAT_ID in Config > Secrets)",
+                },
+            )
+
+        with get_db() as db:
+            alerts = db.get_recent_alerts(limit=20)
+
+        if not alerts:
+            # No alerts — send a simple test message
+            ok = send_telegram_message(
+                config, "🏨 <b>Hotel Price Tracker</b>\n\n✅ Test message — Telegram is working!"
+            )
+            if ok:
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "alerts": 0,
+                        "message": "Test message sent (no alerts to show)",
+                    }
+                )
+            return JSONResponse(
+                {"success": False, "error": "Telegram API call failed (check server logs)"}
+            )
+
+        from ..notifications.telegram import _build_messages
+
+        messages = _build_messages(alerts)
+        sent = 0
+        for msg in messages:
+            if send_telegram_message(config, msg):
+                sent += 1
+
+        if sent == len(messages):
+            return JSONResponse({"success": True, "alerts": len(alerts), "messages": sent})
+        return JSONResponse(
+            {"success": False, "error": f"Sent {sent}/{len(messages)} messages — some failed"},
+        )
+
     # ── Check (price comparison) ───────────────────
     @app.get("/check", response_class=HTMLResponse)
     async def check_page(request: Request):
