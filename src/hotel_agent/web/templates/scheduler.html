@@ -185,8 +185,34 @@
             {% endif %}
             <div>Mode: <strong>{{ sched.mode|capitalize }}</strong></div>
         </div>
+
+        <!-- Digest status -->
+        <div id="digest-status" class="sched-meta-row" style="margin-top:.75rem; padding-top:.75rem; border-top:1px solid rgba(255,255,255,.1);"></div>
     </div>
 </div>
+
+<script>
+(function() {
+    fetch('/api/scheduler/status').then(function(r){return r.json()}).then(function(data) {
+        var el = document.getElementById('digest-status');
+        if (!data.digest_enabled) {
+            el.innerHTML = '<div>Daily Digest: <strong style="color:rgba(255,255,255,.4);">Disabled</strong> <span style="font-size:.75rem;">(enable in <a href="/config" style="color:#fde68a;">Config</a>)</span></div>';
+            return;
+        }
+        var parts = ['<div>Daily Digest: <strong style="color:#6ee7b7;">Enabled</strong> at <strong>' + data.digest_time + '</strong></div>'];
+        if (data.last_digest_at) {
+            parts.push('<div>Last digest: <strong>' + data.last_digest_at.substring(0,19) + '</strong></div>');
+        }
+        if (data.next_digest_at) {
+            parts.push('<div>Next digest: <strong>' + data.next_digest_at.substring(0,19) + '</strong></div>');
+        }
+        if (!data.active) {
+            parts.push('<div style="color:#fca5a5;">Scheduler must be running for digest to send</div>');
+        }
+        el.innerHTML = parts.join('');
+    });
+})();
+</script>
 
 {% if saved %}
 <div class="alert-box alert-success" style="animation:fadeInUp .3s ease-out;">Schedule saved successfully.</div>

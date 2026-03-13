@@ -774,6 +774,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
     @app.get("/api/scheduler/status")
     async def scheduler_status():
         cfg = scheduler.schedule_config
+        digest_cfg = config.notifications.email
+        next_digest = None
+        if scheduler.is_active and digest_cfg.digest_enabled:
+            ndt = scheduler._next_digest_time()
+            if ndt:
+                next_digest = ndt.isoformat(timespec="seconds")
         return JSONResponse(
             {
                 "active": scheduler.is_active,
@@ -785,6 +791,10 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "daily_time": cfg.daily_time,
                 "weekly_days": cfg.weekly_days,
                 "weekly_time": cfg.weekly_time,
+                "digest_enabled": digest_cfg.digest_enabled,
+                "digest_time": digest_cfg.digest_time,
+                "last_digest_at": cfg.last_digest_at,
+                "next_digest_at": next_digest,
             }
         )
 
