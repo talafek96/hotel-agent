@@ -81,6 +81,7 @@ class EmailNotifConfig(BaseModel):
 class NotificationConfig(BaseModel):
     telegram: TelegramNotifConfig = TelegramNotifConfig()
     email: EmailNotifConfig = EmailNotifConfig()
+    show_test_buttons: bool = True
 
 
 # ── Top-level settings ──────────────────────────────────

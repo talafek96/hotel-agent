@@ -61,6 +61,36 @@ def send_telegram_message(
         return False
 
 
+def _format_alert_compact(alert: Alert) -> str:
+    """Format one alert as a single compact line (best deal only)."""
+    sev = _SEVERITY_EMOJI.get(alert.severity, "")
+    typ = _ALERT_TYPE_EMOJI.get(alert.alert_type, "")
+
+    line = f"{sev}{typ} <b>{alert.title}</b>"
+
+    # Show only the best deal (first detail entry)
+    if alert.details:
+        d = alert.details[0]
+        platform = d["platform"]
+        link = d.get("link", "")
+        if link:
+            platform = f'<a href="{link}">{platform}</a>'
+        pct = d.get("percentage_diff", 0)
+        extras = []
+        if d.get("is_cancellable"):
+            extras.append("✅")
+        if d.get("breakfast_included"):
+            extras.append("🍳")
+        extras_str = f" {' '.join(extras)}" if extras else ""
+        line += (
+            f"\n  → {platform}: <b>{d['price']:,.0f} {d['currency']}</b> ({pct:+.1f}%){extras_str}"
+        )
+        if len(alert.details) > 1:
+            line += f"  +{len(alert.details) - 1} more"
+
+    return line
+
+
 def _format_alert_block(alert: Alert) -> str:
     """Format one alert as a detailed block with all vendor info."""
     sev = _SEVERITY_EMOJI.get(alert.severity, "")
@@ -130,10 +160,12 @@ def _build_header(alerts: list[Alert]) -> str:
 
 
 def _build_messages(alerts: list[Alert]) -> list[str]:
-    """Build one or more Telegram messages, each within the 4096 char limit.
+    """Build Telegram messages, preferring ONE message over many.
 
-    Alerts are grouped by severity (urgent first). Each message gets a header.
-    If all alerts fit in one message, send one. Otherwise, paginate.
+    Strategy:
+    1. Try detailed format (all vendors) in a single message.
+    2. If too long, try compact format (best deal only) in a single message.
+    3. If still too long, paginate using compact format.
     """
     ordered = (
         [a for a in alerts if a.severity == "urgent"]
@@ -141,21 +173,28 @@ def _build_messages(alerts: list[Alert]) -> list[str]:
         + [a for a in alerts if a.severity == "info"]
     )
 
-    alert_blocks = [_format_alert_block(a) for a in ordered]
     header = _build_header(alerts)
 
-    # Try single message
-    full = header + "\n\n" + "\n\n".join(alert_blocks)
+    # 1) Try detailed — all vendors, single message
+    detailed_blocks = [_format_alert_block(a) for a in ordered]
+    full = header + "\n\n" + "\n\n".join(detailed_blocks)
     if len(full) <= _TG_MAX:
         return [full]
 
-    # Paginate: pack alerts into pages
+    # 2) Try compact — best deal only, single message
+    compact_blocks = [_format_alert_compact(a) for a in ordered]
+    full_compact = header + "\n\n" + "\n\n".join(compact_blocks)
+    if len(full_compact) <= _TG_MAX:
+        return [full_compact]
+
+    # 3) Paginate using compact format
     messages: list[str] = []
     page_num = 1
     current_blocks: list[str] = []
     current_len = 0
 
-    for block in alert_blocks:
+    for block in compact_blocks:
+        # header + page indicator + accumulated + new block + separators
         test_len = len(header) + 30 + current_len + len(block) + 2
         if current_blocks and test_len > _TG_MAX - 50:
             page_header = header + f"\n📄 <b>({page_num}/{{total}})</b>"

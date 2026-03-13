@@ -192,6 +192,7 @@
 </div>
 
 <script>
+var showTestButtons = {{ show_test_buttons|tojson }};
 (function() {
     fetch('/api/scheduler/status').then(function(r){return r.json()}).then(function(data) {
         var el = document.getElementById('digest-status');
@@ -215,36 +216,56 @@
         if (!data.active) {
             parts.push('<div style="color:#fca5a5;">Scheduler must be running for digest to send</div>');
         }
-        parts.push('<div style="margin-top:.5rem;"><button onclick="testDigest(this)" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);padding:.35rem .85rem;border-radius:.375rem;font-size:.75rem;font-weight:600;cursor:pointer;">Send Test Digest</button> <span id="digest-test-result" style="font-size:.75rem;margin-left:.5rem;"></span></div>');
+        if (showTestButtons) {
+            parts.push('<div style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">');
+            parts.push('<button onclick="testTelegram(this)" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);padding:.35rem .85rem;border-radius:.375rem;font-size:.75rem;font-weight:600;cursor:pointer;">Send Test Telegram</button>');
+            parts.push('<button onclick="testDigest(this)" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);padding:.35rem .85rem;border-radius:.375rem;font-size:.75rem;font-weight:600;cursor:pointer;">Send Test Digest</button>');
+            parts.push('<span id="sched-test-result" style="font-size:.75rem;margin-left:.5rem;"></span>');
+            parts.push('</div>');
+        }
         el.innerHTML = parts.join('');
     });
 })();
 
+function _showSchedTestResult(el, data) {
+    if (data.success) {
+        el.style.color = '#6ee7b7';
+        var msg = 'Sent!';
+        if (data.alerts) msg += ' (' + data.alerts + ' alerts)';
+        if (data.recipients) msg += ' to ' + data.recipients.join(', ');
+        if (data.messages) msg += ' in ' + data.messages + ' message(s)';
+        if (data.message) msg += ' — ' + data.message;
+        el.textContent = msg;
+    } else {
+        el.style.color = '#fca5a5';
+        el.textContent = data.error || 'Unknown error';
+    }
+}
+
+function testTelegram(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    var resultEl = document.getElementById('sched-test-result');
+    resultEl.textContent = '';
+
+    fetch('/api/test-telegram', {method:'POST'})
+        .then(function(r){return r.json()})
+        .then(function(data) { _showSchedTestResult(resultEl, data); })
+        .catch(function(e) { resultEl.style.color = '#fca5a5'; resultEl.textContent = e.message; })
+        .finally(function() { btn.disabled = false; btn.textContent = 'Send Test Telegram'; });
+}
+
 function testDigest(btn) {
     btn.disabled = true;
     btn.textContent = 'Sending...';
-    var resultEl = document.getElementById('digest-test-result');
+    var resultEl = document.getElementById('sched-test-result');
     resultEl.textContent = '';
 
     fetch('/api/scheduler/test-digest', {method:'POST'})
         .then(function(r){return r.json()})
-        .then(function(data) {
-            btn.disabled = false;
-            btn.textContent = 'Send Test Digest';
-            if (data.success) {
-                resultEl.style.color = '#6ee7b7';
-                resultEl.textContent = 'Sent! (' + data.alerts + ' alerts to ' + data.recipients.join(', ') + ')';
-            } else {
-                resultEl.style.color = '#fca5a5';
-                resultEl.textContent = data.error;
-            }
-        })
-        .catch(function(e) {
-            btn.disabled = false;
-            btn.textContent = 'Send Test Digest';
-            resultEl.style.color = '#fca5a5';
-            resultEl.textContent = 'Request failed: ' + e.message;
-        });
+        .then(function(data) { _showSchedTestResult(resultEl, data); })
+        .catch(function(e) { resultEl.style.color = '#fca5a5'; resultEl.textContent = e.message; })
+        .finally(function() { btn.disabled = false; btn.textContent = 'Send Test Digest'; });
 }
 </script>
 

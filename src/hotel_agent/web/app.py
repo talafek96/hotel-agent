@@ -855,7 +855,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "scheduler.html",
-            {"sched": scheduler.schedule_config, "saved": False, "error": None},
+            {
+                "sched": scheduler.schedule_config,
+                "saved": False,
+                "error": None,
+                "show_test_buttons": config.notifications.show_test_buttons,
+            },
         )
 
     @app.post("/scheduler/config", response_class=HTMLResponse)
@@ -886,7 +891,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "scheduler.html",
-            {"sched": scheduler.schedule_config, "saved": error is None, "error": error},
+            {
+                "sched": scheduler.schedule_config,
+                "saved": error is None,
+                "error": error,
+                "show_test_buttons": config.notifications.show_test_buttons,
+            },
         )
 
     @app.post("/scheduler/start")
@@ -994,7 +1004,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
             )
 
         with get_db() as db:
-            alerts = db.get_recent_alerts(limit=20)
+            alerts = db.get_unsent_telegram_alerts()
 
         if not alerts:
             # No alerts — send a simple test message
@@ -1092,6 +1102,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         notif_email_digest: str = Form(""),
         notif_digest_time: str = Form("08:00"),
         notif_email_recipients: str = Form(""),
+        notif_show_test_buttons: str = Form(""),
         db_path: str = Form("hotel_tracker.db"),
         secret_openai_api_key: str = Form(""),
         secret_gemini_api_key: str = Form(""),
@@ -1140,6 +1151,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
             config.notifications.email.recipients = [
                 r.strip() for r in notif_email_recipients.splitlines() if r.strip()
             ]
+            config.notifications.show_test_buttons = notif_show_test_buttons == "1"
 
             # Database
             config.db_path = db_path

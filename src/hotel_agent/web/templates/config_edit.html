@@ -150,10 +150,22 @@
     </div>
 
     <h3 style="font-size:.875rem; margin-top:1.25rem; padding-top:1rem; border-top:1px solid #e2e8f0;">Test Notifications</h3>
-    <p style="font-size:.8rem; color:#64748b; margin-bottom:.75rem;">
-        Send a test notification to verify your setup works. Uses recent alerts from the database.
-    </p>
-    <div style="display:flex; gap:.75rem; flex-wrap:wrap; align-items:center;">
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="notif_show_test_buttons" value="1"
+                   {% if config.notifications.show_test_buttons %}checked{% endif %}
+                   style="width:auto; margin-right:.5rem;"
+                   onchange="document.getElementById('test-buttons-row').style.display = this.checked ? 'flex' : 'none';">
+            Show test buttons
+        </label>
+        <small style="color:#64748b; display:block; margin-top:.25rem;">
+            Enable "Send Test" buttons on Config and Scheduler pages.
+        </small>
+    </div>
+    <div id="test-buttons-row" style="display:{% if config.notifications.show_test_buttons %}flex{% else %}none{% endif %}; gap:.75rem; flex-wrap:wrap; align-items:center;">
+        <p style="font-size:.8rem; color:#64748b; margin-bottom:.75rem; width:100%;">
+            Send a test notification to verify your setup works. Uses recent alerts from the database.
+        </p>
         <button type="button" class="btn btn-primary btn-small" onclick="testTelegram(this)">
             Send Test Telegram
         </button>

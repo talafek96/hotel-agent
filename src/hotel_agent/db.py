@@ -662,6 +662,13 @@ class Database:
         ).fetchall()
         return [self._row_to_alert(r) for r in rows]
 
+    def get_unsent_telegram_alerts(self) -> list[Alert]:
+        """Get alerts that haven't been sent via Telegram yet."""
+        rows = self.conn.execute(
+            "SELECT * FROM alerts WHERE notified_telegram=0 ORDER BY created_at DESC"
+        ).fetchall()
+        return [self._row_to_alert(r) for r in rows]
+
     def mark_alert_notified(self, alert_id: int, channel: str):
         _VALID_CHANNELS = {"telegram", "email", "digest"}
         if channel not in _VALID_CHANNELS:
