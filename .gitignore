@@ -31,3 +31,4 @@ Thumbs.db
 # AI Agents
 .cognition/
 PROMPT.md
+.env_backup
