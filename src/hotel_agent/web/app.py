@@ -8,6 +8,7 @@ import os
 import shutil
 import tempfile
 import threading
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -556,7 +557,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
     @app.post("/scrape")
     async def scrape_run(hotel_filter: str = Form("")):
-        if scrape_state["running"]:
+        if scrape_state["running"] or pipeline_state["running"]:
             return RedirectResponse("/scrape", status_code=303)
 
         scrape_state.update(
@@ -589,6 +590,200 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "current_hotel": scrape_state["current_hotel"],
                 "results": scrape_state["results"],
                 "errors": scrape_state["errors"],
+            }
+        )
+
+    # ── Pipeline (full run: scrape + analyze + notify) ──
+    from ..pipeline import pipeline_lock, preflight_check, run_pipeline
+
+    pipeline_state: dict = {
+        "running": False,
+        "step": "",
+        "detail": {},
+        "result": None,
+        "warnings": [],
+        "errors": [],
+        "source": "",  # "manual" | "scheduler"
+        "finished_at": "",
+    }
+
+    def _pipeline_progress(step: str, detail: dict) -> None:
+        pipeline_state["step"] = step
+        pipeline_state["detail"] = detail
+
+    def _run_pipeline_background(hotel_filter: str, source: str = "manual") -> None:
+        try:
+            pipeline_state["source"] = source
+            result = run_pipeline(
+                config,
+                get_db,
+                hotel_filter=hotel_filter,
+                on_progress=_pipeline_progress,
+            )
+            pipeline_state["result"] = {
+                "scrape_total": result.scrape_total,
+                "scrape_success": result.scrape_success,
+                "scrape_failed": result.scrape_failed,
+                "new_alerts": result.new_alerts,
+                "notifications_sent": result.notifications_sent,
+                "warnings": result.warnings,
+                "errors": result.errors,
+            }
+            pipeline_state["errors"] = result.errors
+        except Exception as exc:
+            pipeline_state["errors"].append(f"Pipeline crashed: {str(exc)[:200]}")
+            log.exception("Background pipeline crashed")
+        finally:
+            pipeline_state["running"] = False
+            pipeline_state["step"] = "done"
+            pipeline_state["finished_at"] = datetime.now().isoformat(timespec="seconds")
+            pipeline_lock.release()
+
+    @app.get("/api/pipeline/preflight")
+    async def pipeline_preflight():
+        with get_db() as db:
+            warnings = preflight_check(config, db)
+        return JSONResponse({"warnings": warnings})
+
+    @app.post("/pipeline/run")
+    async def pipeline_run(hotel_filter: str = Form("")):
+        if not pipeline_lock.acquire(blocking=False):
+            return JSONResponse(
+                {"error": "Pipeline already running", "source": pipeline_state.get("source", "")},
+                status_code=409,
+            )
+
+        pipeline_state.update(
+            {
+                "running": True,
+                "step": "starting",
+                "detail": {},
+                "result": None,
+                "warnings": [],
+                "errors": [],
+                "source": "manual",
+            }
+        )
+        thread = threading.Thread(
+            target=_run_pipeline_background,
+            args=(hotel_filter,),
+            daemon=True,
+        )
+        thread.start()
+        return RedirectResponse("/", status_code=303)
+
+    @app.get("/api/pipeline/status")
+    async def pipeline_status():
+        return JSONResponse(
+            {
+                "running": pipeline_state["running"],
+                "step": pipeline_state["step"],
+                "detail": pipeline_state["detail"],
+                "result": pipeline_state["result"],
+                "warnings": pipeline_state["warnings"],
+                "errors": pipeline_state["errors"],
+                "source": pipeline_state["source"],
+                "finished_at": pipeline_state["finished_at"],
+            }
+        )
+
+    # ── Scheduler ──────────────────────────────────
+    from ..scheduler import ScheduleConfig, Scheduler
+
+    state_path = Path(config.db_path).parent / "scheduler_state.json"
+    scheduler = Scheduler(config, get_db, state_path)
+
+    # Wire scheduler to update pipeline_state when it runs
+    def _sched_run_start() -> None:
+        pipeline_state.update(
+            {
+                "running": True,
+                "step": "starting",
+                "detail": {},
+                "result": None,
+                "warnings": [],
+                "errors": [],
+                "source": "scheduler",
+            }
+        )
+
+    def _sched_run_end(summary: dict) -> None:
+        pipeline_state["running"] = False
+        pipeline_state["step"] = "done"
+        pipeline_state["result"] = summary
+        pipeline_state["finished_at"] = datetime.now().isoformat(timespec="seconds")
+
+    scheduler._on_run_start = _sched_run_start
+    scheduler._on_run_end = _sched_run_end
+    scheduler._on_progress = _pipeline_progress
+
+    # Auto-resume if scheduler was active before shutdown
+    if scheduler.schedule_config.active:
+        scheduler.start()
+
+    @app.get("/scheduler", response_class=HTMLResponse)
+    async def scheduler_page(request: Request):
+        return templates.TemplateResponse(
+            request,
+            "scheduler.html",
+            {"sched": scheduler.schedule_config, "saved": False, "error": None},
+        )
+
+    @app.post("/scheduler/config", response_class=HTMLResponse)
+    async def scheduler_config_save(
+        request: Request,
+        mode: str = Form("interval"),
+        interval_value: int = Form(12),
+        interval_unit: str = Form("hours"),
+        daily_time: str = Form("08:00"),
+        weekly_time: str = Form("08:00"),
+    ):
+        form_data = await request.form()
+        weekly_days = form_data.getlist("weekly_days")
+        error = None
+        try:
+            new_cfg = ScheduleConfig(
+                mode=mode,
+                interval_value=max(1, interval_value),
+                interval_unit=interval_unit if interval_unit in ("hours", "days") else "hours",
+                daily_time=daily_time,
+                weekly_days=[str(d) for d in weekly_days],
+                weekly_time=weekly_time,
+            )
+            scheduler.update_config(new_cfg)
+        except Exception as exc:
+            error = str(exc)
+
+        return templates.TemplateResponse(
+            request,
+            "scheduler.html",
+            {"sched": scheduler.schedule_config, "saved": error is None, "error": error},
+        )
+
+    @app.post("/scheduler/start")
+    async def scheduler_start():
+        scheduler.start()
+        return RedirectResponse("/scheduler", status_code=303)
+
+    @app.post("/scheduler/stop")
+    async def scheduler_stop():
+        scheduler.stop()
+        return RedirectResponse("/scheduler", status_code=303)
+
+    @app.get("/api/scheduler/status")
+    async def scheduler_status():
+        cfg = scheduler.schedule_config
+        return JSONResponse(
+            {
+                "active": scheduler.is_active,
+                "mode": cfg.mode,
+                "next_run_at": cfg.next_run_at,
+                "last_run_at": cfg.last_run_at,
+                "interval_value": cfg.interval_value,
+                "interval_unit": cfg.interval_unit,
+                "daily_time": cfg.daily_time,
+                "weekly_days": cfg.weekly_days,
+                "weekly_time": cfg.weekly_time,
             }
         )
 

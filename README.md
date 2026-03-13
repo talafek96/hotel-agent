@@ -10,10 +10,14 @@ A cost-efficient hotel price tracking system that monitors booking prices across
 - **Multi-provider LLM support** — Switch between OpenAI, Google Gemini, and Anthropic Claude via config. Uses [litellm](https://github.com/BerriAI/litellm) as abstraction layer.
 - **LLM hotel identity verification** — After scraping, verifies that Google's result actually matches your hotel (handles transliterations, naming differences). Caches property tokens for faster subsequent lookups.
 - **SerpAPI retry chain** — 3-step retry for reliability: original params, children counted as adults (Google Hotels limitation), simplified query (hotel name only).
-- **Web dashboard** — FastAPI-based UI with 14 pages: dashboard, hotels, bookings, snapshots, alerts, trends, scrape (with live progress), scrape history, config editor, and more.
+- **Web dashboard** — FastAPI-based UI with 16 pages: dashboard, hotels, bookings, snapshots, alerts, trends, scrape (with live progress), scrape history, scheduler, config editor, and more.
 - **Telegram notifications** — Severity-based alerts with emoji indicators sent to your phone.
 - **Currency conversion** — Configurable exchange rates for cross-currency price comparison.
+- **One-click pipeline** — "Run Now" button on dashboard runs the full scrape→analyze→notify pipeline with live progress and preflight checks.
+- **Configurable scheduler** — Run the pipeline automatically on interval (every N hours/days), daily, or weekly schedules. Persists across server restarts. Dedicated UI with countdown timer.
+- **Parallel execution safety** — Pipeline lock prevents concurrent runs. Manual and scheduled runs cannot overlap.
 - **Background scraping** — Scrape runs in a background thread with live progress polling via the web UI.
+- **Alert deduplication** — Same alert (booking + type + snapshot) is never inserted twice, preventing spam on repeated runs.
 - **CI pipeline** — GitHub Actions with linting (ruff), type checking (mypy), and tests (pytest).
 - **Minimal cost** — SerpAPI free tier: 250 searches/month. LLM extraction costs ~$1-5/month.
 
@@ -76,6 +80,12 @@ hotel-agent check
 # Full pipeline: scrape + analyze + notify
 hotel-agent run
 
+# Scheduler control
+hotel-agent scheduler          # Show scheduler status
+hotel-agent scheduler start    # Mark scheduler active (runs inside serve)
+hotel-agent scheduler stop     # Mark scheduler inactive
+hotel-agent scheduler config   # Show raw scheduler state JSON
+
 # View system status
 hotel-agent status
 
@@ -122,6 +132,8 @@ hotel-agent/
 │   ├── config.py          # Config loading & currency conversion
 │   ├── db.py              # SQLite database
 │   ├── models.py          # Data models
+│   ├── pipeline.py        # Shared pipeline: scrape → analyze → notify
+│   ├── scheduler.py       # Configurable scheduler with state persistence
 │   ├── utils.py           # Platform URLs, date parsing helpers
 │   ├── api/
 │   │   └── serpapi_client.py  # SerpAPI client with retry chain
@@ -130,14 +142,14 @@ hotel-agent/
 │   │   ├── excel_parser.py    # LLM-based Excel parsing
 │   │   └── hotel_matcher.py   # LLM hotel identity verification
 │   ├── analysis/
-│   │   └── comparator.py      # Price comparison rules
+│   │   └── comparator.py      # Price comparison rules + alert dedup
 │   ├── web/
-│   │   ├── app.py             # FastAPI web dashboard (14 pages)
+│   │   ├── app.py             # FastAPI web dashboard (16 pages)
 │   │   └── templates/         # Jinja2 HTML templates
 │   └── notifications/
 │       └── telegram.py        # Telegram bot alerts
-├── tests/                 # Test suite (274 tests)
-└── data/                  # Database & screenshots (gitignored)
+├── tests/                 # Test suite (337 tests)
+└── data/                  # Database, screenshots, scheduler state (gitignored)
 ```
 
 ## Development

@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+{% block title %}Scheduler{% endblock %}
+{% block topbar_title %}Scheduler{% endblock %}
+{% block content %}
+
+<style>
+@keyframes fadeInUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+@keyframes countdownGlow { 0%,100%{text-shadow:0 0 0 transparent} 50%{text-shadow:0 0 12px rgba(251,191,36,.4)} }
+
+/* Hero status banner */
+.sched-hero {
+    background: linear-gradient(135deg, #78350f 0%, #92400e 40%, #b45309 100%);
+    border-radius:.75rem; padding:2rem; color:#fff; position:relative; overflow:hidden;
+    margin-bottom:1.5rem; animation:fadeInUp .4s ease-out;
+}
+.sched-hero::before {
+    content:''; position:absolute; top:-30px; right:-30px; width:200px; height:200px;
+    background:radial-gradient(circle, rgba(251,191,36,.12) 0%, transparent 70%);
+    border-radius:50%; pointer-events:none;
+}
+.sched-hero-inner { position:relative; z-index:1; }
+
+.sched-hero-top { display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap; }
+.sched-hero-icon { font-size:2.5rem; line-height:1; }
+.sched-hero-title { font-size:1.5rem; font-weight:800; }
+
+.sched-pill {
+    display:inline-flex; align-items:center; gap:.4rem;
+    padding:.35rem 1rem; border-radius:999px; font-size:.8rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:.05em;
+}
+.sched-pill-active { background:rgba(52,211,153,.2); color:#6ee7b7; border:1px solid rgba(52,211,153,.35); }
+.sched-pill-paused { background:rgba(251,191,36,.15); color:#fde68a; border:1px solid rgba(251,191,36,.3); }
+.sched-pill .dot {
+    width:9px; height:9px; border-radius:50%; background:#34d399;
+    animation:pulse 1.5s infinite;
+}
+
+.sched-hero-actions { margin-left:auto; }
+.sched-hero-btn {
+    padding:.65rem 1.5rem; font-size:.9rem; font-weight:700; border:none; border-radius:.5rem;
+    cursor:pointer; transition:all .2s; text-transform:uppercase; letter-spacing:.04em;
+}
+.sched-start-btn { background:#34d399; color:#064e3b; box-shadow:0 4px 14px rgba(52,211,153,.3); }
+.sched-start-btn:hover { background:#6ee7b7; transform:translateY(-1px); }
+.sched-stop-btn { background:rgba(239,68,68,.8); color:#fff; box-shadow:0 4px 14px rgba(239,68,68,.25); }
+.sched-stop-btn:hover { background:#ef4444; transform:translateY(-1px); }
+
+/* Countdown display */
+.sched-countdown-box {
+    display:flex; gap:1.5rem; margin-top:1.5rem; justify-content:center;
+    animation:fadeInUp .4s ease-out .15s both;
+}
+.sched-countdown-unit {
+    text-align:center; min-width:72px;
+}
+.sched-countdown-num {
+    font-size:2.2rem; font-weight:900; color:#fde68a; line-height:1;
+    font-variant-numeric:tabular-nums;
+    animation:countdownGlow 3s infinite;
+}
+.sched-countdown-label {
+    font-size:.65rem; text-transform:uppercase; letter-spacing:.06em;
+    color:rgba(255,255,255,.5); margin-top:.25rem;
+}
+
+.sched-meta-row {
+    display:flex; gap:2rem; margin-top:1.25rem; flex-wrap:wrap;
+    font-size:.8rem; color:rgba(255,255,255,.6);
+}
+.sched-meta-row strong { color:rgba(255,255,255,.85); }
+
+/* Mode selector cards */
+.mode-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:1rem; margin-bottom:1.25rem; }
+.mode-card {
+    border:2px solid #e2e8f0; border-radius:.625rem; padding:1.25rem; cursor:pointer;
+    transition:all .2s; text-align:center; position:relative;
+}
+.mode-card:hover { border-color:#3b82f6; background:#f0f7ff; }
+.mode-card.selected { border-color:#f59e0b; background:#fffbeb; box-shadow:0 0 0 3px rgba(245,158,11,.15); }
+.mode-card-icon { font-size:1.75rem; margin-bottom:.5rem; }
+.mode-card-name { font-weight:700; font-size:.9rem; color:#1e293b; }
+.mode-card-desc { font-size:.75rem; color:#64748b; margin-top:.25rem; }
+.mode-card input[type="radio"] { position:absolute; opacity:0; pointer-events:none; }
+
+/* Config panel */
+.config-panel {
+    background:#fff; border-radius:.625rem; border:1px solid #e2e8f0;
+    padding:1.25rem; margin-bottom:1rem; animation:fadeInUp .3s ease-out;
+}
+.config-panel-title { font-size:.85rem; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:.04em; margin-bottom:.75rem; }
+
+/* Day pills */
+.day-pills { display:flex; gap:.5rem; flex-wrap:wrap; }
+.day-pill {
+    display:flex; align-items:center; gap:.35rem;
+    padding:.4rem .85rem; border-radius:999px; font-size:.8rem; font-weight:600;
+    border:2px solid #e2e8f0; cursor:pointer; transition:all .15s; user-select:none;
+    color:#64748b; background:#fff;
+}
+.day-pill:hover { border-color:#f59e0b; }
+.day-pill.checked { background:#f59e0b; color:#fff; border-color:#f59e0b; }
+.day-pill input { position:absolute; opacity:0; pointer-events:none; }
+
+/* Save button */
+.sched-save-btn {
+    padding:.7rem 2rem; font-size:.9rem; font-weight:700; border:none; border-radius:.5rem;
+    cursor:pointer; transition:all .2s; text-transform:uppercase; letter-spacing:.04em;
+    background:linear-gradient(135deg, #f59e0b, #d97706); color:#fff;
+    box-shadow:0 4px 14px rgba(245,158,11,.3);
+}
+.sched-save-btn:hover { transform:translateY(-1px); box-shadow:0 6px 20px rgba(245,158,11,.4); }
+
+@media (max-width: 768px) {
+    .mode-grid { grid-template-columns:1fr; }
+    .sched-countdown-box { gap:.75rem; }
+    .sched-countdown-num { font-size:1.5rem; }
+}
+</style>
+
+<!-- ================================================================ -->
+<!-- HERO STATUS BANNER                                                -->
+<!-- ================================================================ -->
+<div class="sched-hero">
+    <div class="sched-hero-inner">
+        <div class="sched-hero-top">
+            <span class="sched-hero-icon">&#9200;</span>
+            <div>
+                <div class="sched-hero-title">Pipeline Scheduler</div>
+                <div style="font-size:.85rem; color:rgba(255,255,255,.6); margin-top:.15rem;">
+                    {% if sched.mode == 'interval' %}
+                        Every {{ sched.interval_value }} {{ sched.interval_unit }}
+                    {% elif sched.mode == 'daily' %}
+                        Daily at {{ sched.daily_time }}
+                    {% elif sched.mode == 'weekly' %}
+                        {{ sched.weekly_days|join(', ')|title }} at {{ sched.weekly_time }}
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if sched.active %}
+            <span class="sched-pill sched-pill-active"><span class="dot"></span> Active</span>
+            {% else %}
+            <span class="sched-pill sched-pill-paused">Paused</span>
+            {% endif %}
+
+            <div class="sched-hero-actions">
+                {% if sched.active %}
+                <form method="post" action="/scheduler/stop" style="margin:0;">
+                    <button type="submit" class="sched-hero-btn sched-stop-btn">Pause Scheduler</button>
+                </form>
+                {% else %}
+                <form method="post" action="/scheduler/start" style="margin:0;">
+                    <button type="submit" class="sched-hero-btn sched-start-btn">Start Scheduler</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if sched.active and sched.next_run_at %}
+        <!-- Countdown -->
+        <div class="sched-countdown-box" id="countdown-box">
+            <div class="sched-countdown-unit">
+                <div class="sched-countdown-num" id="cd-hours">--</div>
+                <div class="sched-countdown-label">Hours</div>
+            </div>
+            <div class="sched-countdown-unit">
+                <div class="sched-countdown-num" id="cd-minutes">--</div>
+                <div class="sched-countdown-label">Minutes</div>
+            </div>
+            <div class="sched-countdown-unit">
+                <div class="sched-countdown-num" id="cd-seconds">--</div>
+                <div class="sched-countdown-label">Seconds</div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="sched-meta-row">
+            {% if sched.last_run_at %}
+            <div>Last run: <strong>{{ sched.last_run_at[:19] }}</strong></div>
+            {% endif %}
+            {% if sched.next_run_at and sched.active %}
+            <div>Next run: <strong id="next-run-display">{{ sched.next_run_at[:19] }}</strong></div>
+            {% endif %}
+            <div>Mode: <strong>{{ sched.mode|capitalize }}</strong></div>
+        </div>
+    </div>
+</div>
+
+{% if saved %}
+<div class="alert-box alert-success" style="animation:fadeInUp .3s ease-out;">Schedule saved successfully.</div>
+{% endif %}
+{% if error %}
+<div class="alert-box alert-error" style="animation:fadeInUp .3s ease-out;">{{ error }}</div>
+{% endif %}
+
+<!-- ================================================================ -->
+<!-- SCHEDULE CONFIGURATION                                            -->
+<!-- ================================================================ -->
+<div class="card" style="animation:fadeInUp .4s ease-out .1s both;">
+    <h2 style="margin-bottom:1.25rem;">Schedule Configuration</h2>
+
+    <form method="post" action="/scheduler/config" id="sched-form">
+        <!-- Mode selector -->
+        <div class="mode-grid">
+            <label class="mode-card {% if sched.mode == 'interval' %}selected{% endif %}" id="mode-interval-card">
+                <input type="radio" name="mode" value="interval" {% if sched.mode == 'interval' %}checked{% endif %} onchange="selectMode('interval')">
+                <div class="mode-card-icon">&#128260;</div>
+                <div class="mode-card-name">Interval</div>
+                <div class="mode-card-desc">Every N hours or days</div>
+            </label>
+            <label class="mode-card {% if sched.mode == 'daily' %}selected{% endif %}" id="mode-daily-card">
+                <input type="radio" name="mode" value="daily" {% if sched.mode == 'daily' %}checked{% endif %} onchange="selectMode('daily')">
+                <div class="mode-card-icon">&#9728;</div>
+                <div class="mode-card-name">Daily</div>
+                <div class="mode-card-desc">Once a day at a set time</div>
+            </label>
+            <label class="mode-card {% if sched.mode == 'weekly' %}selected{% endif %}" id="mode-weekly-card">
+                <input type="radio" name="mode" value="weekly" {% if sched.mode == 'weekly' %}checked{% endif %} onchange="selectMode('weekly')">
+                <div class="mode-card-icon">&#128197;</div>
+                <div class="mode-card-name">Weekly</div>
+                <div class="mode-card-desc">Specific days of the week</div>
+            </label>
+        </div>
+
+        <!-- Interval config -->
+        <div class="config-panel" id="cfg-interval" style="display:none;">
+            <div class="config-panel-title">Interval settings</div>
+            <div style="display:flex; gap:1rem; align-items:end;">
+                <div class="form-group" style="flex:1; margin-bottom:0;">
+                    <label for="interval_value">Run every</label>
+                    <input type="number" name="interval_value" id="interval_value" min="1" max="168"
+                           value="{{ sched.interval_value }}" style="font-size:1.1rem; font-weight:700; text-align:center;">
+                </div>
+                <div class="form-group" style="flex:1; margin-bottom:0;">
+                    <label for="interval_unit">Unit</label>
+                    <select name="interval_unit" id="interval_unit" style="font-size:1.1rem;">
+                        <option value="hours" {% if sched.interval_unit == 'hours' %}selected{% endif %}>Hours</option>
+                        <option value="days" {% if sched.interval_unit == 'days' %}selected{% endif %}>Days</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily config -->
+        <div class="config-panel" id="cfg-daily" style="display:none;">
+            <div class="config-panel-title">Daily settings</div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label for="daily_time">Run at</label>
+                <input type="time" name="daily_time" id="daily_time" value="{{ sched.daily_time }}"
+                       style="font-size:1.1rem; font-weight:700; text-align:center; max-width:200px;">
+            </div>
+        </div>
+
+        <!-- Weekly config -->
+        <div class="config-panel" id="cfg-weekly" style="display:none;">
+            <div class="config-panel-title">Weekly settings</div>
+            <div class="form-group">
+                <label style="margin-bottom:.5rem;">Run on these days</label>
+                <div class="day-pills">
+                    {% for day in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}
+                    <label class="day-pill {% if day in sched.weekly_days %}checked{% endif %}" onclick="toggleDay(this)">
+                        <input type="checkbox" name="weekly_days" value="{{ day }}"
+                               {% if day in sched.weekly_days %}checked{% endif %}>
+                        {{ day[:3]|capitalize }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label for="weekly_time">Run at</label>
+                <input type="time" name="weekly_time" id="weekly_time" value="{{ sched.weekly_time }}"
+                       style="font-size:1.1rem; font-weight:700; text-align:center; max-width:200px;">
+            </div>
+        </div>
+
+        <button type="submit" class="sched-save-btn" style="margin-top:.75rem;">Save Schedule</button>
+    </form>
+</div>
+
+<script>
+function selectMode(mode) {
+    document.querySelectorAll('.mode-card').forEach(function(c) { c.classList.remove('selected'); });
+    document.getElementById('mode-' + mode + '-card').classList.add('selected');
+    document.getElementById('cfg-interval').style.display = mode === 'interval' ? 'block' : 'none';
+    document.getElementById('cfg-daily').style.display = mode === 'daily' ? 'block' : 'none';
+    document.getElementById('cfg-weekly').style.display = mode === 'weekly' ? 'block' : 'none';
+}
+
+function toggleDay(el) {
+    var cb = el.querySelector('input');
+    // The click already toggled the checkbox, just sync the class
+    setTimeout(function() {
+        if (cb.checked) { el.classList.add('checked'); }
+        else { el.classList.remove('checked'); }
+    }, 0);
+}
+
+// Init: show the right config panel
+(function() {
+    var checked = document.querySelector('input[name="mode"]:checked');
+    if (checked) selectMode(checked.value);
+})();
+
+// Countdown timer + pipeline status polling
+{% if sched.active and sched.next_run_at %}
+(function() {
+    var target = new Date('{{ sched.next_run_at }}');
+    var hEl = document.getElementById('cd-hours');
+    var mEl = document.getElementById('cd-minutes');
+    var sEl = document.getElementById('cd-seconds');
+    var box = document.getElementById('countdown-box');
+    var pipelineRunning = false;
+    var tickId = null;
+
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+    function showPipelineStatus() {
+        fetch('/api/pipeline/status').then(function(r){return r.json()}).then(function(data) {
+            if (data.running && data.source === 'scheduler') {
+                pipelineRunning = true;
+                var stepLabels = {
+                    'starting':'Starting pipeline...',
+                    'preflight':'Running preflight checks...',
+                    'scraping':'Scraping hotel prices...',
+                    'analyzing':'Analyzing prices...',
+                    'notifying':'Sending notifications...'
+                };
+                var label = stepLabels[data.step] || 'Running pipeline...';
+
+                var progressHtml = '<div style="text-align:center; width:100%;">';
+                progressHtml += '<div style="font-size:1.3rem; font-weight:800; color:#6ee7b7; margin-bottom:.5rem;">' + label + '</div>';
+
+                // Step dots
+                var steps = ['preflight','scraping','analyzing','notifying','done'];
+                progressHtml += '<div style="display:flex; justify-content:center; gap:.5rem; margin-bottom:.75rem;">';
+                for (var i = 0; i < steps.length; i++) {
+                    var isCurrent = steps[i] === data.step;
+                    var isDone = steps.indexOf(data.step) > i;
+                    var color = isDone ? '#34d399' : (isCurrent ? '#fbbf24' : 'rgba(255,255,255,.2)');
+                    var size = isCurrent ? '12px' : '8px';
+                    progressHtml += '<span style="width:'+size+';height:'+size+';border-radius:50%;background:'+color+';display:inline-block;transition:all .3s;"></span>';
+                }
+                progressHtml += '</div>';
+
+                // Progress bar if scraping
+                if (data.step === 'scraping' && data.detail && data.detail.total > 0) {
+                    var pct = Math.round((data.detail.completed / data.detail.total) * 100);
+                    progressHtml += '<div style="background:rgba(255,255,255,.15);border-radius:999px;height:8px;overflow:hidden;max-width:400px;margin:0 auto .4rem;">';
+                    progressHtml += '<div style="height:100%;border-radius:999px;width:'+pct+'%;background:linear-gradient(90deg,#34d399,#fbbf24);transition:width .4s;"></div>';
+                    progressHtml += '</div>';
+                    progressHtml += '<div style="font-size:.8rem;color:rgba(255,255,255,.6);">';
+                    progressHtml += data.detail.completed + '/' + data.detail.total;
+                    if (data.detail.current_hotel) progressHtml += ' — ' + data.detail.current_hotel;
+                    progressHtml += '</div>';
+                }
+
+                progressHtml += '</div>';
+                box.innerHTML = progressHtml;
+                box.style.display = 'flex';
+            } else if (pipelineRunning && !data.running) {
+                // Pipeline just finished — show result briefly then reload for new countdown
+                pipelineRunning = false;
+                box.innerHTML = '<div style="text-align:center;width:100%;"><div style="font-size:1.3rem;font-weight:800;color:#34d399;">Pipeline complete!</div><div style="font-size:.8rem;color:rgba(255,255,255,.6);margin-top:.25rem;">Reloading...</div></div>';
+                setTimeout(function(){ location.reload(); }, 2000);
+            }
+        });
+    }
+
+    function tick() {
+        if (pipelineRunning) return; // Don't update countdown while pipeline is running
+        var diff = Math.max(0, Math.floor((target - new Date()) / 1000));
+        var h = Math.floor(diff / 3600);
+        var m = Math.floor((diff % 3600) / 60);
+        var s = diff % 60;
+        hEl.textContent = pad(h);
+        mEl.textContent = pad(m);
+        sEl.textContent = pad(s);
+        if (diff <= 0) {
+            // Timer expired — start polling for pipeline status
+            showPipelineStatus();
+        }
+    }
+
+    tick();
+    setInterval(tick, 1000);
+    // Also poll pipeline status periodically to catch scheduler runs
+    setInterval(showPipelineStatus, 2000);
+    // Check immediately in case pipeline is already running
+    showPipelineStatus();
+})();
+{% endif %}
+</script>
+
+{% endblock %}

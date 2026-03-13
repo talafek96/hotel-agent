@@ -598,43 +598,46 @@ def run(
     """Full pipeline: fetch prices, analyze, and notify."""
     _setup_logging(verbose)
 
-    from .analysis.comparator import run_analysis
     from .config import load_config
     from .db import Database
-    from .notifications.telegram import notify_alerts
+    from .pipeline import run_pipeline
 
     config = load_config(config_path)
 
     console.print("[bold]Hotel Price Tracker - Full Run[/bold]\n")
 
-    # Step 1: Scrape
+    def _cli_progress(step: str, detail: dict) -> None:
+        if step == "scraping":
+            done = detail.get("completed", 0)
+            total = detail.get("total", 0)
+            hotel = detail.get("current_hotel", "")
+            if hotel:
+                console.print(f"  [{done}/{total}] {hotel}...", end=" ")
+        elif step == "analyzing":
+            console.print("\n[bold]Step 2/3: Analyzing prices...[/bold]")
+        elif step == "notifying":
+            console.print("\n[bold]Step 3/3: Sending notifications...[/bold]")
+
     console.print("[bold]Step 1/3: Fetching prices...[/bold]")
-    scrape(hotel_name=None, config_path=config_path, verbose=verbose)
+    result = run_pipeline(
+        config,
+        lambda: Database(config.db_path),
+        on_progress=_cli_progress,
+    )
 
-    # Step 2: Analyze
-    console.print("\n[bold]Step 2/3: Analyzing prices...[/bold]")
-    db = Database(config.db_path)
-    alerts = run_analysis(db, config)
-
-    if alerts:
-        console.print(f"  Found [bold]{len(alerts)}[/bold] alerts")
-
-        # Step 3: Notify
-        console.print("\n[bold]Step 3/3: Sending notifications...[/bold]")
-        sent = notify_alerts(config, alerts)
-        if sent:
-            console.print(f"  Sent {sent} Telegram notifications")
-
-            # Mark as notified in DB
-            for a in alerts:
-                if a.id:
-                    db.mark_alert_notified(a.id, "telegram")
-        else:
-            console.print("  [dim]No notifications sent (Telegram not configured)[/dim]")
+    if result.new_alerts:
+        console.print(f"  Found [bold]{result.new_alerts}[/bold] new alerts")
     else:
         console.print("  [dim]No alerts to send.[/dim]")
 
-    db.close()
+    if result.notifications_sent:
+        console.print(f"  Sent {result.notifications_sent} Telegram notifications")
+    elif result.new_alerts:
+        console.print("  [dim]No notifications sent (Telegram not configured)[/dim]")
+
+    if result.errors:
+        console.print(f"  [yellow]{len(result.errors)} error(s)[/yellow]")
+
     console.print("\n[green]Done![/green]")
 
 
@@ -713,6 +716,67 @@ def serve(
 
         web_app = create_app(config_path)
         uvicorn.run(web_app, host=host, port=port, log_level=log_level)
+
+
+@app.command(name="scheduler")
+def scheduler_cmd(
+    action: str = typer.Argument("status", help="status | start | stop | config"),
+    config_path: str = typer.Option("config.yaml", "--config", "-c"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+):
+    """View or control the pipeline scheduler."""
+    _setup_logging(verbose)
+
+    from .config import load_config
+    from .scheduler import Scheduler
+
+    config = load_config(config_path)
+    state_path = Path(config.db_path).parent / "scheduler_state.json"
+
+    # For status/config we just read the JSON file — no thread needed
+    if action == "status":
+        sched = Scheduler(config, lambda: __import__("contextlib").nullcontext(), state_path)
+        cfg = sched.schedule_config
+        active_str = "[green]Active[/green]" if cfg.active else "[yellow]Paused[/yellow]"
+        console.print(f"Scheduler: {active_str}")
+        console.print(f"  Mode: {cfg.mode}")
+        if cfg.mode == "interval":
+            console.print(f"  Every {cfg.interval_value} {cfg.interval_unit}")
+        elif cfg.mode == "daily":
+            console.print(f"  Daily at {cfg.daily_time}")
+        elif cfg.mode == "weekly":
+            console.print(f"  Weekly on {', '.join(cfg.weekly_days)} at {cfg.weekly_time}")
+        if cfg.next_run_at:
+            console.print(f"  Next run: {cfg.next_run_at[:19]}")
+        if cfg.last_run_at:
+            console.print(f"  Last run: {cfg.last_run_at[:19]}")
+
+    elif action == "start":
+        sched = Scheduler(config, lambda: __import__("contextlib").nullcontext(), state_path)
+        cfg = sched.schedule_config
+        cfg.active = True
+        sched.schedule_config = cfg
+        console.print("[green]Scheduler marked active.[/green]")
+        console.print("The scheduler runs inside the web server (`hotel-agent serve`).")
+
+    elif action == "stop":
+        sched = Scheduler(config, lambda: __import__("contextlib").nullcontext(), state_path)
+        cfg = sched.schedule_config
+        cfg.active = False
+        sched.schedule_config = cfg
+        console.print("[yellow]Scheduler marked inactive.[/yellow]")
+
+    elif action == "config":
+        if state_path.exists():
+            console.print(state_path.read_text(encoding="utf-8"))
+        else:
+            console.print("[dim]No scheduler state file found.[/dim]")
+            console.print(f"Expected at: {state_path}")
+
+    else:
+        console.print(f"[red]Unknown action: {action}[/red]")
+        console.print("Valid actions: status, start, stop, config")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

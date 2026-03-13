@@ -11,8 +11,8 @@ build/
 .mypy_cache/
 
 # Data & secrets
-data/
 data/*.db
+data/*.json
 data/screenshots/
 .env
 config.yaml

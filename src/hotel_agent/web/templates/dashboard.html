@@ -23,6 +23,391 @@
     </div>
 </div>
 
+<style>
+/* ── Pipeline hero card ── */
+@keyframes pipelinePulse { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.35)} 50%{box-shadow:0 0 20px 4px rgba(59,130,246,.25)} }
+@keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+@keyframes fadeInUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+.pipe-card {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 50%, #3b82f6 100%);
+    border-radius: .75rem; padding: 1.5rem 1.75rem; color:#fff; position:relative; overflow:hidden;
+    margin-bottom:1.25rem; animation: fadeInUp .4s ease-out;
+}
+.pipe-card::before {
+    content:''; position:absolute; top:0; right:0; width:180px; height:180px;
+    background:radial-gradient(circle, rgba(255,255,255,.08) 0%, transparent 70%);
+    border-radius:50%; transform:translate(40px,-40px); pointer-events:none;
+}
+.pipe-header { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; position:relative; z-index:1; }
+.pipe-title { font-size:1.25rem; font-weight:700; letter-spacing:.01em; }
+.pipe-subtitle { font-size:.8125rem; color:rgba(255,255,255,.7); }
+.pipe-btn {
+    padding:.75rem 2rem; font-size:1rem; font-weight:700; border:none; border-radius:.5rem;
+    cursor:pointer; transition:all .2s; text-transform:uppercase; letter-spacing:.05em;
+    background:#fff; color:#1e40af; box-shadow:0 4px 14px rgba(0,0,0,.2);
+}
+.pipe-btn:hover { transform:translateY(-1px); box-shadow:0 6px 20px rgba(0,0,0,.3); background:#f0f7ff; }
+.pipe-btn:disabled { opacity:.7; cursor:not-allowed; transform:none; }
+.pipe-btn.running { background:rgba(255,255,255,.15); color:#fff; border:2px solid rgba(255,255,255,.4); }
+
+/* Step tracker */
+.pipe-steps { display:flex; gap:0; margin-top:1.25rem; position:relative; z-index:1; }
+.pipe-step {
+    flex:1; text-align:center; padding:.5rem .25rem; font-size:.7rem; font-weight:600;
+    text-transform:uppercase; letter-spacing:.04em; color:rgba(255,255,255,.35);
+    border-bottom:3px solid rgba(255,255,255,.1); transition:all .3s;
+}
+.pipe-step.active { color:#fff; border-bottom-color:#fbbf24; }
+.pipe-step.done { color:rgba(255,255,255,.7); border-bottom-color:#34d399; }
+.pipe-step-icon { font-size:1.1rem; display:block; margin-bottom:.15rem; }
+
+/* Progress bar */
+.pipe-progress-wrap { margin-top:1rem; position:relative; z-index:1; }
+.pipe-progress-outer {
+    background:rgba(255,255,255,.15); border-radius:999px; height:10px; overflow:hidden;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.2);
+}
+.pipe-progress-inner {
+    height:100%; border-radius:999px; transition:width .4s ease;
+    background:linear-gradient(90deg,#34d399,#fbbf24,#3b82f6);
+    background-size:200% 100%; animation:shimmer 2s linear infinite;
+}
+.pipe-progress-label {
+    display:flex; justify-content:space-between; margin-top:.35rem;
+    font-size:.75rem; color:rgba(255,255,255,.65);
+}
+
+/* Result strip */
+.pipe-result-strip {
+    display:flex; gap:1rem; margin-top:1rem; flex-wrap:wrap; position:relative; z-index:1;
+    animation: fadeInUp .3s ease-out;
+}
+.pipe-result-item {
+    background:rgba(255,255,255,.12); border-radius:.5rem; padding:.6rem 1rem;
+    text-align:center; min-width:100px; backdrop-filter:blur(4px);
+}
+.pipe-result-item .num { font-size:1.4rem; font-weight:800; }
+.pipe-result-item .lbl { font-size:.65rem; text-transform:uppercase; letter-spacing:.04em; color:rgba(255,255,255,.6); }
+
+/* Warnings */
+.pipe-warnings { margin-top:.75rem; position:relative; z-index:1; }
+.pipe-warn {
+    background:rgba(251,191,36,.15); border:1px solid rgba(251,191,36,.3); border-radius:.375rem;
+    padding:.4rem .75rem; font-size:.75rem; color:#fef3c7; margin-bottom:.35rem;
+}
+
+/* Errors */
+.pipe-errors { margin-top:.75rem; position:relative; z-index:1; }
+.pipe-err {
+    background:rgba(239,68,68,.15); border:1px solid rgba(239,68,68,.3); border-radius:.375rem;
+    padding:.4rem .75rem; font-size:.75rem; color:#fecaca; margin-bottom:.35rem;
+}
+
+/* ── Scheduler dashboard card ── */
+@keyframes schedGlow { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.2)} 50%{box-shadow:0 0 16px 2px rgba(245,158,11,.15)} }
+
+.sched-card {
+    background: linear-gradient(135deg, #78350f 0%, #92400e 40%, #b45309 100%);
+    border-radius:.75rem; padding:1.25rem 1.5rem; color:#fff; position:relative; overflow:hidden;
+    margin-bottom:1.25rem; animation: fadeInUp .4s ease-out .1s both;
+}
+.sched-card::before {
+    content:''; position:absolute; top:0; right:0; width:150px; height:150px;
+    background:radial-gradient(circle, rgba(251,191,36,.15) 0%, transparent 70%);
+    border-radius:50%; transform:translate(30px,-30px); pointer-events:none;
+}
+.sched-header { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; position:relative; z-index:1; }
+.sched-title { font-size:1.1rem; font-weight:700; }
+.sched-status-pill {
+    display:inline-flex; align-items:center; gap:.35rem;
+    padding:.3rem .75rem; border-radius:999px; font-size:.75rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:.04em;
+}
+.sched-status-pill.active { background:rgba(52,211,153,.2); color:#6ee7b7; border:1px solid rgba(52,211,153,.3); }
+.sched-status-pill.active .dot { width:8px; height:8px; border-radius:50%; background:#34d399; animation:schedGlow 2s infinite; }
+.sched-status-pill.paused { background:rgba(251,191,36,.15); color:#fde68a; border:1px solid rgba(251,191,36,.25); }
+.sched-countdown {
+    font-size:.85rem; color:rgba(255,255,255,.75); margin-left:auto;
+    font-variant-numeric:tabular-nums;
+}
+.sched-countdown strong { color:#fde68a; font-size:1rem; }
+.sched-configure-link {
+    display:inline-flex; align-items:center; gap:.35rem;
+    padding:.4rem .85rem; border-radius:.375rem; font-size:.8rem; font-weight:600;
+    background:rgba(255,255,255,.12); color:#fff; text-decoration:none; transition:all .15s;
+}
+.sched-configure-link:hover { background:rgba(255,255,255,.2); text-decoration:none; }
+</style>
+
+<!-- ================================================================ -->
+<!-- PIPELINE: Run Now                                                 -->
+<!-- ================================================================ -->
+<div class="pipe-card" id="pipeline-card">
+    <div class="pipe-header">
+        <div>
+            <div class="pipe-title">Full Pipeline</div>
+            <div class="pipe-subtitle">Scrape prices, analyze deals, send alerts</div>
+        </div>
+        <div style="margin-left:auto;">
+            <form method="post" action="/pipeline/run" id="pipeline-form" style="margin:0;">
+                <input type="hidden" name="hotel_filter" value="">
+                <button type="submit" id="pipeline-btn" class="pipe-btn">Run Now</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Step tracker -->
+    <div class="pipe-steps" id="pipe-steps" style="display:none;">
+        <div class="pipe-step" data-step="preflight">
+            <span class="pipe-step-icon">&#9881;</span> Preflight
+        </div>
+        <div class="pipe-step" data-step="scraping">
+            <span class="pipe-step-icon">&#128269;</span> Scraping
+        </div>
+        <div class="pipe-step" data-step="analyzing">
+            <span class="pipe-step-icon">&#128200;</span> Analyzing
+        </div>
+        <div class="pipe-step" data-step="notifying">
+            <span class="pipe-step-icon">&#128276;</span> Notifying
+        </div>
+        <div class="pipe-step" data-step="done">
+            <span class="pipe-step-icon">&#10004;</span> Done
+        </div>
+    </div>
+
+    <!-- Progress bar (visible during scraping) -->
+    <div class="pipe-progress-wrap" id="pipe-progress" style="display:none;">
+        <div class="pipe-progress-outer">
+            <div class="pipe-progress-inner" id="pipe-bar" style="width:0%;"></div>
+        </div>
+        <div class="pipe-progress-label">
+            <span id="pipe-hotel-name"></span>
+            <span id="pipe-pct-text"></span>
+        </div>
+    </div>
+
+    <!-- Result summary -->
+    <div class="pipe-result-strip" id="pipe-result" style="display:none;"></div>
+
+    <!-- Warnings -->
+    <div class="pipe-warnings" id="pipe-warnings"></div>
+
+    <!-- Errors -->
+    <div class="pipe-errors" id="pipe-errors"></div>
+</div>
+
+<script>
+(function() {
+    var btn = document.getElementById('pipeline-btn');
+    var form = document.getElementById('pipeline-form');
+    var stepsEl = document.getElementById('pipe-steps');
+    var progressEl = document.getElementById('pipe-progress');
+    var barEl = document.getElementById('pipe-bar');
+    var hotelEl = document.getElementById('pipe-hotel-name');
+    var pctEl = document.getElementById('pipe-pct-text');
+    var resultEl = document.getElementById('pipe-result');
+    var warningsEl = document.getElementById('pipe-warnings');
+    var errorsEl = document.getElementById('pipe-errors');
+    var card = document.getElementById('pipeline-card');
+
+    var STEPS = ['preflight','scraping','analyzing','notifying','done'];
+    var polling = null;
+
+    // Load preflight warnings on page load
+    fetch('/api/pipeline/preflight').then(function(r){return r.json()}).then(function(data) {
+        if (data.warnings && data.warnings.length) {
+            warningsEl.innerHTML = data.warnings.map(function(w) {
+                return '<div class="pipe-warn">&#9888; ' + w + '</div>';
+            }).join('');
+        }
+    });
+
+    function setSteps(current) {
+        stepsEl.style.display = 'flex';
+        var stepEls = stepsEl.querySelectorAll('.pipe-step');
+        var reached = false;
+        for (var i = 0; i < stepEls.length; i++) {
+            var s = stepEls[i].getAttribute('data-step');
+            if (s === current) {
+                stepEls[i].className = 'pipe-step active';
+                reached = true;
+            } else if (!reached) {
+                stepEls[i].className = 'pipe-step done';
+            } else {
+                stepEls[i].className = 'pipe-step';
+            }
+        }
+    }
+
+    function showResult(r, source, finishedAt) {
+        resultEl.style.display = 'flex';
+        var sourceTag = source ? '<div class="pipe-result-item" style="font-size:.75rem;"><div class="num" style="font-size:1rem;">' + (source === 'scheduler' ? '&#9200;' : '&#9654;') + '</div><div class="lbl">' + source + '</div></div>' : '';
+        var timeTag = finishedAt ? '<div class="pipe-result-item" style="font-size:.75rem;"><div class="num" style="font-size:.85rem;">' + finishedAt.replace('T',' ') + '</div><div class="lbl">Completed</div></div>' : '';
+        resultEl.innerHTML =
+            '<div class="pipe-result-item"><div class="num">' + r.scrape_success + '/' + r.scrape_total + '</div><div class="lbl">Hotels Scraped</div></div>' +
+            '<div class="pipe-result-item"><div class="num">' + r.new_alerts + '</div><div class="lbl">New Alerts</div></div>' +
+            '<div class="pipe-result-item"><div class="num">' + r.notifications_sent + '</div><div class="lbl">Notifications</div></div>' +
+            (r.scrape_failed > 0 ? '<div class="pipe-result-item" style="border:1px solid rgba(239,68,68,.3);"><div class="num" style="color:#fca5a5;">' + r.scrape_failed + '</div><div class="lbl">Failed</div></div>' : '') +
+            sourceTag + timeTag;
+    }
+
+    function pollStatus() {
+        fetch('/api/pipeline/status').then(function(r){return r.json()}).then(function(data) {
+            if (data.running) {
+                btn.disabled = true;
+                var srcLabel = data.source === 'scheduler' ? 'Scheduler running...' : 'Running...';
+                btn.textContent = srcLabel;
+                btn.className = 'pipe-btn running';
+                card.style.animation = 'pipelinePulse 2s infinite';
+                setSteps(data.step);
+                resultEl.style.display = 'none';
+
+                if (data.step === 'scraping' && data.detail && data.detail.total > 0) {
+                    progressEl.style.display = 'block';
+                    var pct = Math.round((data.detail.completed / data.detail.total) * 100);
+                    barEl.style.width = pct + '%';
+                    hotelEl.textContent = data.detail.current_hotel || '';
+                    pctEl.textContent = data.detail.completed + ' / ' + data.detail.total + ' (' + pct + '%)';
+                } else {
+                    progressEl.style.display = 'none';
+                }
+
+                // Keep polling
+                if (!polling) polling = setInterval(pollStatus, 1200);
+            } else if (data.step === 'done') {
+                clearInterval(polling); polling = null;
+                btn.disabled = false;
+                btn.textContent = 'Run Now';
+                btn.className = 'pipe-btn';
+                card.style.animation = '';
+                setSteps('done');
+                progressEl.style.display = 'none';
+
+                if (data.result) showResult(data.result, data.source, data.finished_at);
+                if (data.errors && data.errors.length) {
+                    errorsEl.innerHTML = data.errors.map(function(e) {
+                        return '<div class="pipe-err">' + e + '</div>';
+                    }).join('');
+                } else {
+                    errorsEl.innerHTML = '';
+                }
+            } else {
+                // No run has happened yet — idle state
+                btn.disabled = false;
+                btn.textContent = 'Run Now';
+                btn.className = 'pipe-btn';
+                card.style.animation = '';
+                stepsEl.style.display = 'none';
+                progressEl.style.display = 'none';
+            }
+        });
+    }
+
+    pollStatus();
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        btn.disabled = true;
+        btn.textContent = 'Starting...';
+        btn.className = 'pipe-btn running';
+        resultEl.style.display = 'none';
+        errorsEl.innerHTML = '';
+
+        fetch('/pipeline/run', {
+            method:'POST',
+            headers:{'Content-Type':'application/x-www-form-urlencoded'},
+            body:'hotel_filter=',
+            redirect:'manual'
+        }).then(function(resp) {
+            if (resp.status === 409) {
+                return resp.json().then(function(d) {
+                    btn.textContent = 'Already running (' + (d.source||'?') + ')';
+                    setTimeout(function(){ btn.disabled=false; btn.textContent='Run Now'; btn.className='pipe-btn'; }, 3000);
+                });
+            }
+            polling = setInterval(pollStatus, 1200);
+            pollStatus();
+        });
+    });
+})();
+</script>
+
+
+<!-- ================================================================ -->
+<!-- SCHEDULER: Status card                                            -->
+<!-- ================================================================ -->
+<div class="sched-card" id="scheduler-card">
+    <div class="sched-header">
+        <div style="display:flex; align-items:center; gap:.75rem;">
+            <span style="font-size:1.6rem;">&#9200;</span>
+            <div>
+                <div class="sched-title">Scheduler</div>
+            </div>
+        </div>
+        <span id="sched-pill" class="sched-status-pill paused">
+            <span class="dot" style="display:none;"></span> <span id="sched-pill-text">Loading...</span>
+        </span>
+        <div class="sched-countdown" id="sched-countdown"></div>
+        <a href="/scheduler" class="sched-configure-link" style="margin-left:auto;">&#9881; Configure</a>
+    </div>
+</div>
+<script>
+(function() {
+    var pill = document.getElementById('sched-pill');
+    var pillText = document.getElementById('sched-pill-text');
+    var dot = pill.querySelector('.dot');
+    var countdown = document.getElementById('sched-countdown');
+    var tickInterval = null;
+
+    function updateScheduler() {
+        fetch('/api/scheduler/status').then(function(r){return r.json()}).then(function(sched) {
+            if (!sched.active) {
+                pill.className = 'sched-status-pill paused';
+                pillText.textContent = 'Paused';
+                dot.style.display = 'none';
+                countdown.innerHTML = '<span style="color:rgba(255,255,255,.5);">Not scheduled</span>';
+                return;
+            }
+
+            // Scheduler is active — check if pipeline is currently running
+            fetch('/api/pipeline/status').then(function(r){return r.json()}).then(function(pipe) {
+                if (pipe.running && pipe.source === 'scheduler') {
+                    pill.className = 'sched-status-pill active';
+                    pillText.textContent = 'Running';
+                    dot.style.display = '';
+                    var stepLabel = pipe.step || 'starting';
+                    var stepLabels = {'starting':'Starting...','preflight':'Preflight...','scraping':'Scraping...','analyzing':'Analyzing...','notifying':'Notifying...'};
+                    countdown.innerHTML = '<strong style="color:#6ee7b7;">' + (stepLabels[stepLabel]||stepLabel) + '</strong>';
+                } else {
+                    pill.className = 'sched-status-pill active';
+                    pillText.textContent = 'Active';
+                    dot.style.display = '';
+                    if (sched.next_run_at) {
+                        var next = new Date(sched.next_run_at);
+                        var diff = Math.max(0, Math.floor((next - new Date()) / 1000));
+                        if (diff <= 0) {
+                            countdown.innerHTML = 'Next run <strong>imminent</strong>';
+                        } else {
+                            var h = Math.floor(diff/3600), m = Math.floor((diff%3600)/60), s = diff%60;
+                            var parts = [];
+                            if (h) parts.push(h+'h');
+                            if (m) parts.push(m+'m');
+                            parts.push(s+'s');
+                            countdown.innerHTML = 'Next run in <strong>' + parts.join(' ') + '</strong>';
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    updateScheduler();
+    setInterval(updateScheduler, 2000);
+})();
+</script>
+
+
 {% if stats.last_run %}
 <div class="card" style="margin-top:1rem; padding:1rem 1.25rem;">
     <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
