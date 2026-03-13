@@ -650,32 +650,38 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 status_code=409,
             )
 
-        pipeline_state.update({
-            "running": True,
-            "step": "starting",
-            "detail": {},
-            "result": None,
-            "warnings": [],
-            "errors": [],
-            "source": "manual",
-        })
+        pipeline_state.update(
+            {
+                "running": True,
+                "step": "starting",
+                "detail": {},
+                "result": None,
+                "warnings": [],
+                "errors": [],
+                "source": "manual",
+            }
+        )
         thread = threading.Thread(
-            target=_run_pipeline_background, args=(hotel_filter,), daemon=True,
+            target=_run_pipeline_background,
+            args=(hotel_filter,),
+            daemon=True,
         )
         thread.start()
         return RedirectResponse("/", status_code=303)
 
     @app.get("/api/pipeline/status")
     async def pipeline_status():
-        return JSONResponse({
-            "running": pipeline_state["running"],
-            "step": pipeline_state["step"],
-            "detail": pipeline_state["detail"],
-            "result": pipeline_state["result"],
-            "warnings": pipeline_state["warnings"],
-            "errors": pipeline_state["errors"],
-            "source": pipeline_state["source"],
-        })
+        return JSONResponse(
+            {
+                "running": pipeline_state["running"],
+                "step": pipeline_state["step"],
+                "detail": pipeline_state["detail"],
+                "result": pipeline_state["result"],
+                "warnings": pipeline_state["warnings"],
+                "errors": pipeline_state["errors"],
+                "source": pipeline_state["source"],
+            }
+        )
 
     # ── Scheduler ──────────────────────────────────
     from ..scheduler import ScheduleConfig, Scheduler
@@ -685,15 +691,17 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
     # Wire scheduler to update pipeline_state when it runs
     def _sched_run_start() -> None:
-        pipeline_state.update({
-            "running": True,
-            "step": "starting",
-            "detail": {},
-            "result": None,
-            "warnings": [],
-            "errors": [],
-            "source": "scheduler",
-        })
+        pipeline_state.update(
+            {
+                "running": True,
+                "step": "starting",
+                "detail": {},
+                "result": None,
+                "warnings": [],
+                "errors": [],
+                "source": "scheduler",
+            }
+        )
 
     def _sched_run_end(summary: dict) -> None:
         pipeline_state["running"] = False
@@ -759,17 +767,19 @@ def create_app(config_path: str | None = None) -> FastAPI:
     @app.get("/api/scheduler/status")
     async def scheduler_status():
         cfg = scheduler.schedule_config
-        return JSONResponse({
-            "active": scheduler.is_active,
-            "mode": cfg.mode,
-            "next_run_at": cfg.next_run_at,
-            "last_run_at": cfg.last_run_at,
-            "interval_value": cfg.interval_value,
-            "interval_unit": cfg.interval_unit,
-            "daily_time": cfg.daily_time,
-            "weekly_days": cfg.weekly_days,
-            "weekly_time": cfg.weekly_time,
-        })
+        return JSONResponse(
+            {
+                "active": scheduler.is_active,
+                "mode": cfg.mode,
+                "next_run_at": cfg.next_run_at,
+                "last_run_at": cfg.last_run_at,
+                "interval_value": cfg.interval_value,
+                "interval_unit": cfg.interval_unit,
+                "daily_time": cfg.daily_time,
+                "weekly_days": cfg.weekly_days,
+                "weekly_time": cfg.weekly_time,
+            }
+        )
 
     # ── Check (price comparison) ───────────────────
     @app.get("/check", response_class=HTMLResponse)

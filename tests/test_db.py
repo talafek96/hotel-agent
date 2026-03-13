@@ -999,3 +999,56 @@ class TestEdgeCases:
         )
         wl_id = tmp_db.add_watchlist(entry)
         assert wl_id > 0
+
+
+class TestAlertExists:
+    """Tests for the alert dedup method."""
+
+    def test_no_matching_alert(self, tmp_db, sample_hotel, sample_snapshot):
+        hotel_id = tmp_db.upsert_hotel(sample_hotel)
+        sample_snapshot.hotel_id = hotel_id
+        snap_id = tmp_db.add_snapshot(sample_snapshot)
+        assert tmp_db.alert_exists(1, "price_drop", snap_id) is False
+
+    def test_matching_alert_exists(self, tmp_db, sample_hotel, sample_booking, sample_snapshot):
+        hotel_id = tmp_db.upsert_hotel(sample_hotel)
+        sample_booking.hotel_id = hotel_id
+        booking_id = tmp_db.upsert_booking(sample_booking)
+        sample_snapshot.hotel_id = hotel_id
+        snap_id = tmp_db.add_snapshot(sample_snapshot)
+
+        from hotel_agent.models import Alert
+
+        alert = Alert(
+            booking_id=booking_id,
+            snapshot_id=snap_id,
+            alert_type="price_drop",
+            severity="info",
+            title="Test",
+            message="Test alert",
+        )
+        tmp_db.add_alert(alert)
+        assert tmp_db.alert_exists(booking_id, "price_drop", snap_id) is True
+
+    def test_different_alert_type_not_matched(
+        self, tmp_db, sample_hotel, sample_booking, sample_snapshot
+    ):
+        hotel_id = tmp_db.upsert_hotel(sample_hotel)
+        sample_booking.hotel_id = hotel_id
+        booking_id = tmp_db.upsert_booking(sample_booking)
+        sample_snapshot.hotel_id = hotel_id
+        snap_id = tmp_db.add_snapshot(sample_snapshot)
+
+        from hotel_agent.models import Alert
+
+        alert = Alert(
+            booking_id=booking_id,
+            snapshot_id=snap_id,
+            alert_type="price_drop",
+            severity="info",
+            title="Test",
+            message="Test",
+        )
+        tmp_db.add_alert(alert)
+        # Different alert_type should not match
+        assert tmp_db.alert_exists(booking_id, "upgrade", snap_id) is False

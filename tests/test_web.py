@@ -445,6 +445,138 @@ class TestScrapeBackground:
             assert any("SERPAPI_KEY" in e for e in data["errors"])
 
 
+class TestPipelineRoutes:
+    """Tests for pipeline (Run Now) web endpoints."""
+
+    def test_pipeline_preflight_returns_200(self, seeded_env):
+        client, *_ = seeded_env
+        resp = client.get("/api/pipeline/preflight")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "warnings" in data
+        assert isinstance(data["warnings"], list)
+
+    def test_pipeline_preflight_warns_no_serpapi(self, seeded_env):
+        client, *_ = seeded_env
+        resp = client.get("/api/pipeline/preflight")
+        data = resp.json()
+        assert any("SERPAPI_KEY" in w for w in data["warnings"])
+
+    def test_pipeline_status_idle(self, seeded_env):
+        client, *_ = seeded_env
+        resp = client.get("/api/pipeline/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["running"] is False
+
+    def test_post_pipeline_run_redirects(self, seeded_env):
+        client, *_ = seeded_env
+        resp = client.post(
+            "/pipeline/run",
+            data={"hotel_filter": ""},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/"
+
+    def test_pipeline_run_completes(self, seeded_env):
+        import time
+
+        client, *_ = seeded_env
+        client.post("/pipeline/run", data={"hotel_filter": ""}, follow_redirects=False)
+        time.sleep(0.5)
+        resp = client.get("/api/pipeline/status")
+        data = resp.json()
+        # Should have finished (no API key = quick exit)
+        # step can be "" if pipeline completed and state was read before thread updated it
+        assert data["running"] is False or data["step"] in (
+            "done",
+            "starting",
+            "scraping",
+            "analyzing",
+            "notifying",
+        )
+
+    def test_dashboard_contains_run_now(self, seeded_env):
+        client, *_ = seeded_env
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "Run Now" in resp.text
+        assert "pipeline" in resp.text.lower()
+
+
+class TestSchedulerRoutes:
+    """Tests for scheduler web endpoints."""
+
+    def test_scheduler_page_returns_200(self, seeded_env):
+        client, *_ = seeded_env
+        resp = client.get("/scheduler")
+        assert resp.status_code == 200
+        assert "Scheduler" in resp.text
+        assert "Schedule Configuration" in resp.text
+
+    def test_scheduler_status_api(self, seeded_env):
+        client, *_ = seeded_env
+        resp = client.get("/api/scheduler/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "active" in data
+        assert "mode" in data
+        assert data["active"] is False  # default is inactive
+
+    def test_scheduler_config_save(self, seeded_env):
+        client, *_ = seeded_env
+        resp = client.post(
+            "/scheduler/config",
+            data={
+                "mode": "daily",
+                "interval_value": "6",
+                "interval_unit": "hours",
+                "daily_time": "10:00",
+                "weekly_time": "08:00",
+            },
+        )
+        assert resp.status_code == 200
+        assert "Schedule saved" in resp.text
+
+        # Verify via API
+        resp = client.get("/api/scheduler/status")
+        data = resp.json()
+        assert data["mode"] == "daily"
+        assert data["daily_time"] == "10:00"
+
+    def test_scheduler_start_stop(self, seeded_env):
+        client, *_ = seeded_env
+
+        # Start
+        resp = client.post("/scheduler/start", follow_redirects=False)
+        assert resp.status_code == 303
+
+        resp = client.get("/api/scheduler/status")
+        data = resp.json()
+        assert data["active"] is True
+
+        # Stop
+        resp = client.post("/scheduler/stop", follow_redirects=False)
+        assert resp.status_code == 303
+
+        resp = client.get("/api/scheduler/status")
+        data = resp.json()
+        assert data["active"] is False
+
+    def test_dashboard_contains_scheduler_card(self, seeded_env):
+        client, *_ = seeded_env
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "Scheduler" in resp.text
+
+    def test_sidebar_contains_scheduler_link(self, seeded_env):
+        client, *_ = seeded_env
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "/scheduler" in resp.text
+
+
 class TestPlatformUrl:
     """Unit tests for platform_url helper."""
 

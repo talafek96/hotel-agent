@@ -37,6 +37,7 @@ _WEEKDAY_MAP = {
 
 # ── Schedule configuration ──────────────────────────────
 
+
 @dataclass
 class ScheduleConfig:
     """Persisted scheduler configuration."""
@@ -123,6 +124,7 @@ def compute_next_run(cfg: ScheduleConfig, now: datetime | None = None) -> dateti
 
 # ── Scheduler engine ────────────────────────────────────
 
+
 class Scheduler:
     """Background thread that runs the pipeline on a schedule."""
 
@@ -149,7 +151,11 @@ class Scheduler:
             try:
                 data = json.loads(self._state_path.read_text(encoding="utf-8"))
                 self._sched = ScheduleConfig.from_dict(data)
-                log.info("Scheduler state loaded: active=%s, mode=%s", self._sched.active, self._sched.mode)
+                log.info(
+                    "Scheduler state loaded: active=%s, mode=%s",
+                    self._sched.active,
+                    self._sched.mode,
+                )
             except Exception:
                 log.warning("Failed to load scheduler state, using defaults")
                 self._sched = ScheduleConfig()

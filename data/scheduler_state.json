@@ -1,0 +1,14 @@
+{
+  "active": false,
+  "mode": "daily",
+  "interval_value": 12,
+  "interval_unit": "hours",
+  "daily_time": "08:00",
+  "weekly_days": [
+    "monday",
+    "friday"
+  ],
+  "weekly_time": "08:00",
+  "last_run_at": "",
+  "next_run_at": "2026-03-14T08:00:00"
+}

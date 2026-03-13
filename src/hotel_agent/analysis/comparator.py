@@ -248,8 +248,10 @@ def run_analysis(db: Database, config: AppConfig) -> list[Alert]:
         alerts = compare_booking_to_snapshots(booking, hotel, snapshots, config)
 
         for alert in alerts:
-            if alert.booking_id and alert.snapshot_id and db.alert_exists(
-                alert.booking_id, alert.alert_type, alert.snapshot_id
+            if (
+                alert.booking_id
+                and alert.snapshot_id
+                and db.alert_exists(alert.booking_id, alert.alert_type, alert.snapshot_id)
             ):
                 log.debug(f"Skipping duplicate alert: {alert.title}")
                 continue

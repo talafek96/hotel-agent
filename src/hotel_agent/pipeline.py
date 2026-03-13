@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 
 # ── Result dataclass ────────────────────────────────────
 
+
 @dataclass
 class PipelineResult:
     """Summary returned after a full pipeline run."""
@@ -35,6 +36,7 @@ class PipelineResult:
 
 
 # ── Preflight checks ───────────────────────────────────
+
 
 def preflight_check(config: AppConfig, db: Database) -> list[str]:
     """Return a list of warning strings. Empty list = all clear."""
@@ -55,9 +57,7 @@ def preflight_check(config: AppConfig, db: Database) -> list[str]:
     if config.notifications.telegram_enabled and (
         not config.telegram_bot_token or not config.telegram_chat_id
     ):
-        warnings.append(
-            "Telegram enabled but token/chat_id missing — notifications will fail."
-        )
+        warnings.append("Telegram enabled but token/chat_id missing — notifications will fail.")
 
     return warnings
 
@@ -74,6 +74,7 @@ ProgressCallback = Callable[[str, dict], None]
 
 
 # ── Core pipeline ───────────────────────────────────────
+
 
 def run_pipeline(
     config: AppConfig,
@@ -143,27 +144,35 @@ def run_pipeline(
             for i, booking in enumerate(all_bookings):
                 hotel = db.get_hotel(booking.hotel_id)
                 if not hotel:
-                    _progress("scraping", {
-                        "completed": i + 1,
-                        "total": result.scrape_total,
-                        "current_hotel": "?",
-                    })
+                    _progress(
+                        "scraping",
+                        {
+                            "completed": i + 1,
+                            "total": result.scrape_total,
+                            "current_hotel": "?",
+                        },
+                    )
                     continue
 
-                _progress("scraping", {
-                    "completed": i,
-                    "total": result.scrape_total,
-                    "current_hotel": hotel.name,
-                })
+                _progress(
+                    "scraping",
+                    {
+                        "completed": i,
+                        "total": result.scrape_total,
+                        "current_hotel": hotel.name,
+                    },
+                )
 
                 if not booking.check_in or not booking.check_out:
                     errors.append(f"{hotel.name}: missing dates")
-                    scrape_results.append({
-                        "hotel": hotel.name,
-                        "provider": "serpapi",
-                        "prices": 0,
-                        "status": "missing dates",
-                    })
+                    scrape_results.append(
+                        {
+                            "hotel": hotel.name,
+                            "provider": "serpapi",
+                            "prices": 0,
+                            "status": "missing dates",
+                        }
+                    )
                     result.scrape_failed += 1
                     continue
 
@@ -194,16 +203,16 @@ def run_pipeline(
                             hotel.serpapi_property_token = api_result.property_token
                             db.upsert_hotel(hotel)
                         else:
-                            msg = (
-                                f"Google returned '{api_result.matched_name}' (not a match)"
-                            )
+                            msg = f"Google returned '{api_result.matched_name}' (not a match)"
                             errors.append(f"{hotel.name}: {msg}")
-                            scrape_results.append({
-                                "hotel": hotel.name,
-                                "provider": "serpapi",
-                                "prices": 0,
-                                "status": msg,
-                            })
+                            scrape_results.append(
+                                {
+                                    "hotel": hotel.name,
+                                    "provider": "serpapi",
+                                    "prices": 0,
+                                    "status": msg,
+                                }
+                            )
                             result.scrape_failed += 1
                             continue
 
@@ -213,41 +222,46 @@ def run_pipeline(
 
                     sources_detail = []
                     for s in sorted(snapshots, key=lambda x: x.price):
-                        sources_detail.append({
-                            "platform": s.platform,
-                            "link": s.link,
-                            "price": s.price,
-                            "currency": s.currency,
-                        })
-                    source_names = (
-                        sorted({s.platform for s in snapshots}) if snapshots else []
+                        sources_detail.append(
+                            {
+                                "platform": s.platform,
+                                "link": s.link,
+                                "price": s.price,
+                                "currency": s.currency,
+                            }
+                        )
+                    source_names = sorted({s.platform for s in snapshots}) if snapshots else []
+                    scrape_results.append(
+                        {
+                            "hotel": hotel.name,
+                            "provider": (", ".join(source_names) if source_names else "serpapi"),
+                            "prices": len(snapshots),
+                            "sources": sources_detail,
+                            "status": "ok" if snapshots else "no prices",
+                        }
                     )
-                    scrape_results.append({
-                        "hotel": hotel.name,
-                        "provider": (
-                            ", ".join(source_names) if source_names else "serpapi"
-                        ),
-                        "prices": len(snapshots),
-                        "sources": sources_detail,
-                        "status": "ok" if snapshots else "no prices",
-                    })
                     result.scrape_success += 1
 
                 except SerpAPIError as e:
                     errors.append(f"{hotel.name}: {str(e)[:100]}")
-                    scrape_results.append({
-                        "hotel": hotel.name,
-                        "provider": "serpapi",
-                        "prices": 0,
-                        "status": f"error: {str(e)[:80]}",
-                    })
+                    scrape_results.append(
+                        {
+                            "hotel": hotel.name,
+                            "provider": "serpapi",
+                            "prices": 0,
+                            "status": f"error: {str(e)[:80]}",
+                        }
+                    )
                     result.scrape_failed += 1
 
-            _progress("scraping", {
-                "completed": result.scrape_total,
-                "total": result.scrape_total,
-                "current_hotel": "",
-            })
+            _progress(
+                "scraping",
+                {
+                    "completed": result.scrape_total,
+                    "total": result.scrape_total,
+                    "current_hotel": "",
+                },
+            )
 
             db.finish_scrape_run(
                 run_id,
@@ -277,11 +291,14 @@ def run_pipeline(
                 db.mark_alert_notified(a.id, "telegram")
         result.notifications_sent = sent
 
-    _progress("done", {
-        "scrape_total": result.scrape_total,
-        "scrape_success": result.scrape_success,
-        "new_alerts": result.new_alerts,
-        "notifications_sent": result.notifications_sent,
-    })
+    _progress(
+        "done",
+        {
+            "scrape_total": result.scrape_total,
+            "scrape_success": result.scrape_success,
+            "new_alerts": result.new_alerts,
+            "notifications_sent": result.notifications_sent,
+        },
+    )
 
     return result
