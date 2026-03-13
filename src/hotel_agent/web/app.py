@@ -973,18 +973,26 @@ def create_app(config_path: str | None = None) -> FastAPI:
             # Database
             config.db_path = db_path
 
-            # Secrets
-            config.openai_api_key = SecretStr(secret_openai_api_key)
-            config.gemini_api_key = SecretStr(secret_gemini_api_key)
-            config.anthropic_api_key = SecretStr(secret_anthropic_api_key)
-            config.serpapi_key = SecretStr(secret_serpapi_key)
-            config.telegram_bot_token = SecretStr(secret_telegram_bot_token)
-            config.telegram_chat_id = SecretStr(secret_telegram_chat_id)
-            config.gmail_user = SecretStr(secret_gmail_user)
-            config.gmail_app_password = SecretStr(secret_gmail_app_password)
+            # Secrets — only update if the user typed a new value (browsers
+            # clear password fields, so empty means "don't change")
+            secrets_changed = False
+            for attr, form_val in [
+                ("openai_api_key", secret_openai_api_key),
+                ("gemini_api_key", secret_gemini_api_key),
+                ("anthropic_api_key", secret_anthropic_api_key),
+                ("serpapi_key", secret_serpapi_key),
+                ("telegram_bot_token", secret_telegram_bot_token),
+                ("telegram_chat_id", secret_telegram_chat_id),
+                ("gmail_user", secret_gmail_user),
+                ("gmail_app_password", secret_gmail_app_password),
+            ]:
+                if form_val:  # non-empty = user typed something
+                    setattr(config, attr, SecretStr(form_val))
+                    secrets_changed = True
 
             save_config(config, config_path)
-            save_secrets(config)
+            if secrets_changed:
+                save_secrets(config)
         except Exception as e:
             log.exception("Failed to save config")
             error = str(e)
