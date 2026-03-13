@@ -59,6 +59,7 @@ class ScheduleConfig:
     # bookkeeping
     last_run_at: str = ""
     next_run_at: str = ""
+    last_digest_at: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -287,6 +288,9 @@ class Scheduler:
                 if self._on_run_end:
                     self._on_run_end(summary)
 
+                # Check if digest email is due
+                self._maybe_send_digest()
+
             except Exception:
                 log.exception("Scheduler: pipeline run crashed")
                 self._sched.last_run_at = datetime.now().isoformat()
@@ -296,3 +300,72 @@ class Scheduler:
 
             # Small delay before computing next cycle
             time.sleep(1)
+
+    def _maybe_send_digest(self) -> None:
+        """Send a digest email if the configured digest time has passed since the last digest."""
+        if not self._app_config.notifications.email.digest_enabled:
+            return
+
+        now = datetime.now()
+        h, m = _parse_time(self._app_config.notifications.email.digest_time)
+        digest_time_today = now.replace(hour=h, minute=m, second=0, microsecond=0)
+
+        # Only send if we're past the digest time today
+        if now < digest_time_today:
+            return
+
+        # Only send once per day
+        if self._sched.last_digest_at:
+            last = datetime.fromisoformat(self._sched.last_digest_at)
+            if last.date() >= now.date():
+                return
+
+        # Get alerts since last digest
+        since = self._sched.last_digest_at or (now - timedelta(days=1)).isoformat()
+        try:
+            with self._get_db() as db:
+                alerts = db.get_alerts_since(since)
+
+            if not alerts:
+                log.info("Scheduler: no alerts since last digest, skipping")
+                self._sched.last_digest_at = now.isoformat()
+                self.save_state()
+                return
+
+            # Generate LLM summary
+            summary = self._generate_digest_summary(alerts)
+
+            from .notifications.email import send_digest_email
+
+            if send_digest_email(self._app_config, alerts, summary=summary):
+                log.info("Scheduler: digest email sent with %d alerts", len(alerts))
+            else:
+                log.warning("Scheduler: digest email failed")
+
+            self._sched.last_digest_at = now.isoformat()
+            self.save_state()
+
+        except Exception:
+            log.exception("Scheduler: digest email crashed")
+
+    def _generate_digest_summary(self, alerts: list) -> str:
+        """Use LLM to generate a brief summary of the alerts for the digest."""
+        try:
+            from .llm.client import call_llm
+
+            alert_texts = []
+            for a in alerts[:20]:  # limit to avoid token overflow
+                alert_texts.append(
+                    f"- [{a.severity}] {a.title}: savings {a.price_diff:,.0f} ({a.percentage_diff:.1f}%)"
+                )
+
+            prompt = (
+                "Summarize these hotel price alerts in 2-3 sentences. "
+                "Focus on the best deals and most important findings. "
+                "Be concise and actionable.\n\n" + "\n".join(alert_texts)
+            )
+
+            return call_llm(self._app_config, prompt, temperature=0.3, max_tokens=200)
+        except Exception:
+            log.warning("Scheduler: LLM summary generation failed, sending digest without summary")
+            return ""

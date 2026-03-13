@@ -122,17 +122,31 @@
             Telegram Enabled
         </label>
     </div>
+    <h3 style="font-size:.875rem; margin-top:1rem;">Email</h3>
     <div class="form-group">
         <label>
-            <input type="checkbox" name="notif_email" value="1"
-                   {% if config.notifications.email.enabled %}checked{% endif %}
+            <input type="checkbox" name="notif_email_triggered" value="1"
+                   {% if config.notifications.email.triggered_enabled %}checked{% endif %}
                    style="width:auto; margin-right:.5rem;">
-            Email Enabled
+            Send email on each pipeline run
         </label>
     </div>
     <div class="form-group">
-        <label for="notif_digest_time">Email Digest Time</label>
-        <input type="text" id="notif_digest_time" name="notif_digest_time" value="{{ config.notifications.email.digest_time }}" placeholder="08:00">
+        <label>
+            <input type="checkbox" name="notif_email_digest" value="1"
+                   {% if config.notifications.email.digest_enabled %}checked{% endif %}
+                   style="width:auto; margin-right:.5rem;">
+            Send daily digest email
+        </label>
+    </div>
+    <div class="form-group">
+        <label for="notif_digest_time">Digest Time</label>
+        <input type="time" id="notif_digest_time" name="notif_digest_time" value="{{ config.notifications.email.digest_time }}">
+    </div>
+    <div class="form-group">
+        <label for="notif_email_recipients">Recipients (one per line)</label>
+        <textarea id="notif_email_recipients" name="notif_email_recipients" rows="2"
+                  placeholder="user@example.com">{{ config.notifications.email.recipients | join('\n') }}</textarea>
     </div>
 </div>
 

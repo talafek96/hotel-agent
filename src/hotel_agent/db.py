@@ -629,6 +629,16 @@ class Database:
         ).fetchall()
         return [self._row_to_alert(r) for r in rows]
 
+    def get_alerts_since(self, since_iso: str) -> list[Alert]:
+        """Get all alerts created since the given ISO datetime string."""
+        rows = self.conn.execute(
+            """SELECT * FROM alerts
+               WHERE created_at >= ?
+               ORDER BY created_at DESC""",
+            (since_iso,),
+        ).fetchall()
+        return [self._row_to_alert(r) for r in rows]
+
     def mark_alert_notified(self, alert_id: int, channel: str):
         _VALID_CHANNELS = {"telegram", "email"}
         if channel not in _VALID_CHANNELS:

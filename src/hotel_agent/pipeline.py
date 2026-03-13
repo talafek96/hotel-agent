@@ -104,6 +104,7 @@ def run_pipeline(
     from .analysis.comparator import run_analysis
     from .api.serpapi_client import SerpAPIError, search_hotel_prices
     from .llm.hotel_matcher import verify_hotel_match
+    from .notifications.email import notify_alerts_email
     from .notifications.telegram import notify_alerts
 
     result = PipelineResult()
@@ -286,11 +287,20 @@ def run_pipeline(
 
     with get_db() as db:
         pending = db.get_pending_alerts()
-        sent = notify_alerts(config, pending)
+
+        # Telegram
+        tg_sent = notify_alerts(config, pending)
         for a in pending:
             if a.id and not a.notified_telegram:
                 db.mark_alert_notified(a.id, "telegram")
-        result.notifications_sent = sent
+
+        # Email (triggered)
+        em_sent = notify_alerts_email(config, pending)
+        for a in pending:
+            if a.id and not a.notified_email:
+                db.mark_alert_notified(a.id, "email")
+
+        result.notifications_sent = tg_sent + em_sent
 
     _progress(
         "done",

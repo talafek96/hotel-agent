@@ -849,8 +849,10 @@ def create_app(config_path: str | None = None) -> FastAPI:
         alert_upgrade_max_extra_percentage: float = Form(0),
         alert_only_cancellable: str = Form(""),
         notif_telegram: str = Form(""),
-        notif_email: str = Form(""),
+        notif_email_triggered: str = Form(""),
+        notif_email_digest: str = Form(""),
         notif_digest_time: str = Form("08:00"),
+        notif_email_recipients: str = Form(""),
         db_path: str = Form("hotel_tracker.db"),
         secret_openai_api_key: str = Form(""),
         secret_gemini_api_key: str = Form(""),
@@ -893,8 +895,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
             # Notifications
             config.notifications.telegram.enabled = notif_telegram == "1"
-            config.notifications.email.enabled = notif_email == "1"
+            config.notifications.email.triggered_enabled = notif_email_triggered == "1"
+            config.notifications.email.digest_enabled = notif_email_digest == "1"
             config.notifications.email.digest_time = notif_digest_time
+            config.notifications.email.recipients = [
+                r.strip() for r in notif_email_recipients.splitlines() if r.strip()
+            ]
 
             # Database
             config.db_path = db_path

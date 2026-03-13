@@ -176,7 +176,9 @@ def status(
         "[green]enabled[/green]" if config.notifications.telegram.enabled else "[dim]disabled[/dim]"
     )
     em_status = (
-        "[green]enabled[/green]" if config.notifications.email.enabled else "[dim]disabled[/dim]"
+        "[green]enabled[/green]"
+        if config.notifications.email.triggered_enabled or config.notifications.email.digest_enabled
+        else "[dim]disabled[/dim]"
     )
     console.print(f"\n  LLM provider:      [cyan]{config.llm.provider}[/cyan]")
     console.print(f"  Model:             [cyan]{config.llm.model}[/cyan]")

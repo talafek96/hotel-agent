@@ -40,8 +40,10 @@ notifications:
   telegram:
     enabled: false
   email:
-    enabled: false
-    digest_time: "08:00"
+    triggered_enabled: false   # Send email on each pipeline run
+    digest_enabled: false      # Send daily digest with LLM summary
+    digest_time: "08:00"       # Time of day for digest email
+    recipients: []             # Email addresses, e.g. ["user@example.com"]
 
 # Database
 database:

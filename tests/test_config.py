@@ -51,7 +51,8 @@ class TestDefaultConfig:
     def test_default_notification_config(self):
         nc = NotificationConfig()
         assert nc.telegram.enabled is False
-        assert nc.email.enabled is False
+        assert nc.email.triggered_enabled is False
+        assert nc.email.digest_enabled is False
         assert nc.email.digest_time == "08:00"
 
 
@@ -202,14 +203,14 @@ class TestLoadConfig:
         data = {
             "notifications": {
                 "telegram": {"enabled": True},
-                "email": {"enabled": True, "digest_time": "09:30"},
+                "email": {"triggered_enabled": True, "digest_time": "09:30"},
             },
         }
         config_file.write_text(yaml.dump(data), encoding="utf-8")
         with patch.dict(os.environ, {}, clear=True):
             cfg = load_config(config_file)
         assert cfg.notifications.telegram.enabled is True
-        assert cfg.notifications.email.enabled is True
+        assert cfg.notifications.email.triggered_enabled is True
         assert cfg.notifications.email.digest_time == "09:30"
 
     def test_load_database_path(self, tmp_path):
@@ -354,7 +355,7 @@ class TestSaveConfig:
         cfg.alerts.price_drop.min_absolute = 500.0
         cfg.alerts.price_drop.min_percentage = 5.0
         cfg.notifications.telegram.enabled = True
-        cfg.notifications.email.enabled = True
+        cfg.notifications.email.triggered_enabled = True
         cfg.notifications.email.digest_time = "09:00"
         cfg.db_path = "custom.db"
 

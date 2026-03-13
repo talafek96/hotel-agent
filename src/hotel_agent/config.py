@@ -72,8 +72,10 @@ class TelegramNotifConfig(BaseModel):
 
 
 class EmailNotifConfig(BaseModel):
-    enabled: bool = False
-    digest_time: str = "08:00"
+    triggered_enabled: bool = False  # send email on each pipeline run
+    digest_enabled: bool = False  # send daily digest
+    digest_time: str = "08:00"  # time of day for digest
+    recipients: list[str] = []  # email addresses to send to
 
 
 class NotificationConfig(BaseModel):
