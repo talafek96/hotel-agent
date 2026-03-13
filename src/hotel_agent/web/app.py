@@ -677,6 +677,100 @@ def create_app(config_path: str | None = None) -> FastAPI:
             "source": pipeline_state["source"],
         })
 
+    # ── Scheduler ──────────────────────────────────
+    from ..scheduler import ScheduleConfig, Scheduler
+
+    state_path = Path(config.db_path).parent / "scheduler_state.json"
+    scheduler = Scheduler(config, get_db, state_path)
+
+    # Wire scheduler to update pipeline_state when it runs
+    def _sched_run_start() -> None:
+        pipeline_state.update({
+            "running": True,
+            "step": "starting",
+            "detail": {},
+            "result": None,
+            "warnings": [],
+            "errors": [],
+            "source": "scheduler",
+        })
+
+    def _sched_run_end(summary: dict) -> None:
+        pipeline_state["running"] = False
+        pipeline_state["step"] = "done"
+        pipeline_state["result"] = summary
+
+    scheduler._on_run_start = _sched_run_start
+    scheduler._on_run_end = _sched_run_end
+
+    # Auto-resume if scheduler was active before shutdown
+    if scheduler.schedule_config.active:
+        scheduler.start()
+
+    @app.get("/scheduler", response_class=HTMLResponse)
+    async def scheduler_page(request: Request):
+        return templates.TemplateResponse(
+            request,
+            "scheduler.html",
+            {"sched": scheduler.schedule_config, "saved": False, "error": None},
+        )
+
+    @app.post("/scheduler/config", response_class=HTMLResponse)
+    async def scheduler_config_save(
+        request: Request,
+        mode: str = Form("interval"),
+        interval_value: int = Form(12),
+        interval_unit: str = Form("hours"),
+        daily_time: str = Form("08:00"),
+        weekly_time: str = Form("08:00"),
+    ):
+        form_data = await request.form()
+        weekly_days = form_data.getlist("weekly_days")
+        error = None
+        try:
+            new_cfg = ScheduleConfig(
+                mode=mode,
+                interval_value=max(1, interval_value),
+                interval_unit=interval_unit if interval_unit in ("hours", "days") else "hours",
+                daily_time=daily_time,
+                weekly_days=[str(d) for d in weekly_days],
+                weekly_time=weekly_time,
+            )
+            scheduler.update_config(new_cfg)
+        except Exception as exc:
+            error = str(exc)
+
+        return templates.TemplateResponse(
+            request,
+            "scheduler.html",
+            {"sched": scheduler.schedule_config, "saved": error is None, "error": error},
+        )
+
+    @app.post("/scheduler/start")
+    async def scheduler_start():
+        scheduler.start()
+        return RedirectResponse("/scheduler", status_code=303)
+
+    @app.post("/scheduler/stop")
+    async def scheduler_stop():
+        scheduler.stop()
+        return RedirectResponse("/scheduler", status_code=303)
+
+    @app.get("/api/scheduler/status")
+    async def scheduler_status():
+        cfg = scheduler.schedule_config
+        return JSONResponse({
+            "active": scheduler.is_active,
+            "mode": cfg.mode,
+            "next_run_at": cfg.next_run_at,
+            "last_run_at": cfg.last_run_at,
+            "interval_value": cfg.interval_value,
+            "interval_unit": cfg.interval_unit,
+            "daily_time": cfg.daily_time,
+            "weekly_days": cfg.weekly_days,
+            "weekly_time": cfg.weekly_time,
+        })
+
     # ── Check (price comparison) ───────────────────
     @app.get("/check", response_class=HTMLResponse)
     async def check_page(request: Request):

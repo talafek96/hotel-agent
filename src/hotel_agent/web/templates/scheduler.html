@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Scheduler{% endblock %}
+{% block topbar_title %}Scheduler{% endblock %}
+{% block content %}
+
+<!-- Status card -->
+<div class="card" style="border-left:4px solid #f59e0b; padding:1rem 1.25rem;">
+    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+        <strong>Status</strong>
+        <span id="sched-badge" class="badge {% if sched.active %}badge-green{% else %}badge-yellow{% endif %}">
+            {{ "Active" if sched.active else "Paused" }}
+        </span>
+        {% if sched.next_run_at and sched.active %}
+        <span id="sched-next" style="color:#64748b; font-size:.8125rem;">
+            Next run: <span id="next-run-time">{{ sched.next_run_at[:19] }}</span>
+            <span id="next-run-countdown" style="margin-left:.5rem;"></span>
+        </span>
+        {% endif %}
+        {% if sched.last_run_at %}
+        <span style="color:#64748b; font-size:.8125rem;">
+            Last: {{ sched.last_run_at[:19] }}
+        </span>
+        {% endif %}
+        <div style="margin-left:auto; display:flex; gap:0.5rem;">
+            {% if sched.active %}
+            <form method="post" action="/scheduler/stop" style="margin:0;">
+                <button type="submit" class="btn btn-danger btn-small">Pause</button>
+            </form>
+            {% else %}
+            <form method="post" action="/scheduler/start" style="margin:0;">
+                <button type="submit" class="btn btn-primary btn-small">Start</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Schedule config form -->
+<div class="card">
+    <h2>Schedule Configuration</h2>
+    <form method="post" action="/scheduler/config" id="sched-config-form">
+        <div class="form-group">
+            <label for="mode">Mode</label>
+            <select name="mode" id="mode" onchange="toggleMode()">
+                <option value="interval" {% if sched.mode == 'interval' %}selected{% endif %}>Interval</option>
+                <option value="daily" {% if sched.mode == 'daily' %}selected{% endif %}>Daily</option>
+                <option value="weekly" {% if sched.mode == 'weekly' %}selected{% endif %}>Weekly</option>
+            </select>
+        </div>
+
+        <!-- Interval mode fields -->
+        <div id="interval-fields" style="display:none;">
+            <div style="display:flex; gap:1rem;">
+                <div class="form-group" style="flex:1;">
+                    <label for="interval_value">Every</label>
+                    <input type="number" name="interval_value" id="interval_value" min="1" max="168"
+                           value="{{ sched.interval_value }}">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label for="interval_unit">Unit</label>
+                    <select name="interval_unit" id="interval_unit">
+                        <option value="hours" {% if sched.interval_unit == 'hours' %}selected{% endif %}>Hours</option>
+                        <option value="days" {% if sched.interval_unit == 'days' %}selected{% endif %}>Days</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily mode fields -->
+        <div id="daily-fields" style="display:none;">
+            <div class="form-group">
+                <label for="daily_time">Run at</label>
+                <input type="time" name="daily_time" id="daily_time" value="{{ sched.daily_time }}">
+            </div>
+        </div>
+
+        <!-- Weekly mode fields -->
+        <div id="weekly-fields" style="display:none;">
+            <div class="form-group">
+                <label>Days</label>
+                <div style="display:flex; flex-wrap:wrap; gap:.5rem;">
+                    {% for day in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}
+                    <label style="display:flex; align-items:center; gap:.25rem; font-size:.875rem; font-weight:normal;">
+                        <input type="checkbox" name="weekly_days" value="{{ day }}"
+                               {% if day in sched.weekly_days %}checked{% endif %}>
+                        {{ day|capitalize }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="weekly_time">Run at</label>
+                <input type="time" name="weekly_time" id="weekly_time" value="{{ sched.weekly_time }}">
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top:.5rem;">Save Schedule</button>
+    </form>
+</div>
+
+{% if saved %}
+<div class="alert-box alert-success">Schedule saved.</div>
+{% endif %}
+{% if error %}
+<div class="alert-box alert-error">{{ error }}</div>
+{% endif %}
+
+<script>
+function toggleMode() {
+    var mode = document.getElementById('mode').value;
+    document.getElementById('interval-fields').style.display = mode === 'interval' ? 'block' : 'none';
+    document.getElementById('daily-fields').style.display = mode === 'daily' ? 'block' : 'none';
+    document.getElementById('weekly-fields').style.display = mode === 'weekly' ? 'block' : 'none';
+}
+toggleMode();
+
+// Countdown timer for next run
+var nextEl = document.getElementById('next-run-time');
+var countdownEl = document.getElementById('next-run-countdown');
+if (nextEl && countdownEl) {
+    var nextStr = nextEl.textContent.trim();
+    function updateCountdown() {
+        var next = new Date(nextStr);
+        var now = new Date();
+        var diff = Math.max(0, Math.floor((next - now) / 1000));
+        if (diff <= 0) {
+            countdownEl.textContent = '(imminent)';
+            return;
+        }
+        var h = Math.floor(diff / 3600);
+        var m = Math.floor((diff % 3600) / 60);
+        var s = diff % 60;
+        var parts = [];
+        if (h) parts.push(h + 'h');
+        if (m) parts.push(m + 'm');
+        parts.push(s + 's');
+        countdownEl.textContent = '(in ' + parts.join(' ') + ')';
+    }
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
+}
+</script>
+
+{% endblock %}

@@ -178,6 +178,41 @@
 })();
 </script>
 
+<!-- Scheduler Status Card -->
+<div id="scheduler-card" class="card" style="margin-top:1rem; padding:1rem 1.25rem; border-left:4px solid #f59e0b;">
+    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+        <strong>Scheduler</strong>
+        <span id="sched-status-badge" class="badge badge-yellow">Loading...</span>
+        <span id="sched-next-run" style="color:#64748b; font-size:.8125rem;"></span>
+        <a href="/scheduler" style="margin-left:auto; font-size:.8125rem;">Configure</a>
+    </div>
+</div>
+<script>
+(function() {
+    fetch('/api/scheduler/status').then(r => r.json()).then(data => {
+        var badge = document.getElementById('sched-status-badge');
+        var nextEl = document.getElementById('sched-next-run');
+        if (data.active) {
+            badge.className = 'badge badge-green';
+            badge.textContent = 'Active';
+            if (data.next_run_at) {
+                var next = new Date(data.next_run_at);
+                var diff = Math.max(0, Math.floor((next - new Date()) / 1000));
+                var h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60);
+                var parts = [];
+                if (h) parts.push(h + 'h');
+                if (m || !h) parts.push(m + 'm');
+                nextEl.textContent = 'Next run in ' + parts.join(' ');
+            }
+        } else {
+            badge.className = 'badge badge-yellow';
+            badge.textContent = 'Paused';
+            nextEl.textContent = '';
+        }
+    });
+})();
+</script>
+
 {% if stats.last_run %}
 <div class="card" style="margin-top:1rem; padding:1rem 1.25rem;">
     <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
