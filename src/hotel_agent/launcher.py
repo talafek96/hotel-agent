@@ -292,14 +292,18 @@ def _run_tray(server_proc: subprocess.Popen) -> None:  # type: ignore[type-arg]
         return
 
     base_dir = _resolve_base_dir()
-    icon_path = base_dir / "assets" / "icon.png"
-    if not icon_path.exists():
-        icon_path = base_dir / "assets" / "icon.ico"
-    if not icon_path.exists():
-        # Create a minimal fallback icon
-        image = Image.new("RGB", (64, 64), color=(59, 130, 246))
+    # Prefer ICO on Windows (has pre-rendered sizes with sharpening for small
+    # tray icons); fall back to PNG, then to a solid-colour placeholder.
+    ico_path = base_dir / "assets" / "icon.ico"
+    png_path = base_dir / "assets" / "icon.png"
+    if sys.platform == "win32" and ico_path.exists():
+        image = Image.open(ico_path)
+    elif png_path.exists():
+        image = Image.open(png_path)
+    elif ico_path.exists():
+        image = Image.open(ico_path)
     else:
-        image = Image.open(icon_path)
+        image = Image.new("RGB", (64, 64), color=(59, 130, 246))
 
     def open_dashboard(icon: pystray.Icon, item: pystray.MenuItem) -> None:  # type: ignore[name-defined]
         _open_browser(URL)
