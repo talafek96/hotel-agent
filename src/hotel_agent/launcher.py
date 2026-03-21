@@ -98,8 +98,10 @@ def _start_server(base_dir: Path, uv: Path) -> subprocess.Popen:  # type: ignore
     kwargs: dict = {
         "cwd": str(base_dir),
         "env": env,
-        "stdout": subprocess.PIPE,
-        "stderr": subprocess.PIPE,
+        "stdout": open(  # noqa: SIM115
+            _data_dir(base_dir) / "server.log", "w", encoding="utf-8"
+        ),
+        "stderr": subprocess.STDOUT,
     }
 
     if sys.platform == "win32":
@@ -126,6 +128,17 @@ def _ensure_deps(base_dir: Path, uv: Path) -> None:
     if result.returncode != 0:
         raise RuntimeError(f"uv sync failed:\n{result.stderr}")
     log.info("Dependencies installed.")
+
+
+def _ensure_config(base_dir: Path) -> None:
+    """Copy config.example.yaml to config.yaml if it doesn't exist."""
+    config_path = base_dir / "config.yaml"
+    example_path = base_dir / "config.example.yaml"
+    if not config_path.exists() and example_path.exists():
+        import shutil
+
+        shutil.copy2(example_path, config_path)
+        log.info("Created config.yaml from config.example.yaml")
 
 
 def _data_dir(base_dir: Path) -> Path:
@@ -346,6 +359,7 @@ def main() -> None:
 
     # Resolve uv and ensure deps are installed
     uv = _resolve_uv_path(base_dir)
+    _ensure_config(base_dir)
     _ensure_deps(base_dir, uv)
 
     # Start the server
@@ -354,7 +368,16 @@ def main() -> None:
 
     # Wait for server to be ready
     if not _wait_for_server():
+        # Server failed — check if it crashed
+        server_log = _data_dir(base_dir) / "server.log"
         log.error("Server failed to start within %ds.", _STARTUP_TIMEOUT)
+        if server_log.exists():
+            log.error(
+                "Server log (last 20 lines):\n%s",
+                "\n".join(
+                    server_log.read_text(encoding="utf-8", errors="replace").splitlines()[-20:]
+                ),
+            )
         server_proc.terminate()
         sys.exit(1)
 
