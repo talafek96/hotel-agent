@@ -639,7 +639,10 @@ class TestAutostartAPI:
 
     def test_post_autostart_toggle(self, client, tmp_path):
         """POST /api/autostart toggles the setting."""
-        with patch("hotel_agent.launcher.Path.home", return_value=tmp_path):
+        with (
+            patch("hotel_agent.launcher.Path.home", return_value=tmp_path),
+            patch("shutil.which", return_value="/usr/bin/uv"),
+        ):
             resp = client.post(
                 "/api/autostart",
                 json={"enabled": True},

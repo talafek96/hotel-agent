@@ -492,11 +492,30 @@ def is_autostart_enabled() -> bool:
         return desktop_path.exists()
 
 
+def _autostart_command(base_dir: Path) -> str:
+    """Build the command string for OS startup registration.
+
+    Frozen exe: just the exe path.
+    Dev/uv mode: find uv on PATH + --directory + run command.
+    """
+    if getattr(sys, "frozen", False):
+        return str(Path(sys.executable).resolve())
+    import shutil
+
+    uv = shutil.which("uv")
+    if not uv:
+        raise FileNotFoundError(
+            "uv not found on PATH. Install it: "
+            "https://docs.astral.sh/uv/getting-started/installation/"
+        )
+    project = str(base_dir.resolve())
+    return f'"{uv}" run --no-dev --directory "{project}" hotel-agent-gui'
+
+
 def set_autostart(base_dir: Path | None = None, *, enable: bool) -> None:
     """Register or unregister the launcher to run on OS startup."""
     if base_dir is None:
         base_dir = _resolve_base_dir()
-    exe = str(Path(sys.executable).resolve()) if getattr(sys, "frozen", False) else None
 
     if sys.platform == "win32":
         import winreg  # type: ignore[import-not-found]
@@ -505,8 +524,8 @@ def set_autostart(base_dir: Path | None = None, *, enable: bool) -> None:
         try:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
             if enable:
-                path = exe or "uv run --no-dev hotel-agent-gui"
-                winreg.SetValueEx(key, _APP_NAME, 0, winreg.REG_SZ, f'"{path}"')
+                cmd = _autostart_command(base_dir)
+                winreg.SetValueEx(key, _APP_NAME, 0, winreg.REG_SZ, cmd)
                 log.info("Autostart enabled: %s will start on login.", _APP_NAME)
             else:
                 with contextlib.suppress(FileNotFoundError):
@@ -521,7 +540,7 @@ def set_autostart(base_dir: Path | None = None, *, enable: bool) -> None:
         plist_path = plist_dir / f"com.{_APP_NAME.lower()}.plist"
         if enable:
             plist_dir.mkdir(parents=True, exist_ok=True)
-            cmd = exe or str(base_dir / "HotelPriceTracker")
+            cmd = _autostart_command(base_dir)
             plist_path.write_text(
                 f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -544,7 +563,7 @@ def set_autostart(base_dir: Path | None = None, *, enable: bool) -> None:
         desktop_path = autostart_dir / f"{_APP_NAME}.desktop"
         if enable:
             autostart_dir.mkdir(parents=True, exist_ok=True)
-            cmd = exe or str(base_dir / "HotelPriceTracker")
+            cmd = _autostart_command(base_dir)
             desktop_path.write_text(
                 f"""[Desktop Entry]
 Type=Application

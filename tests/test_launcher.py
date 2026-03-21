@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from hotel_agent.launcher import (
+    _autostart_command,
     _ensure_deps,
     _pid_file,
     _resolve_base_dir,
@@ -212,13 +213,15 @@ class TestAutostart:
             assert is_autostart_enabled() is False
 
     def test_set_autostart_creates_desktop_file(self, tmp_path):
-        """Enabling autostart creates the .desktop file."""
+        """Enabling autostart creates the .desktop file with uv path."""
         with patch("hotel_agent.launcher.Path.home", return_value=tmp_path):
             set_autostart(tmp_path, enable=True)
         desktop = tmp_path / ".config" / "autostart" / "HotelPriceTracker.desktop"
         assert desktop.exists()
         content = desktop.read_text()
         assert "X-GNOME-Autostart-enabled=true" in content
+        assert "uv" in content
+        assert "--directory" in content
 
     def test_set_autostart_then_detect(self, tmp_path):
         """Enable → detect → True; disable → detect → False."""
@@ -233,3 +236,12 @@ class TestAutostart:
         with patch("hotel_agent.launcher.Path.home", return_value=tmp_path):
             set_autostart(tmp_path, enable=False)
             assert is_autostart_enabled() is False
+
+    def test_autostart_command_includes_uv_and_directory(self):
+        """Non-frozen command should have full uv path and --directory."""
+        base = _resolve_base_dir()
+        cmd = _autostart_command(base)
+        assert "uv" in cmd
+        assert "--no-dev" in cmd
+        assert "--directory" in cmd
+        assert "hotel-agent-gui" in cmd
