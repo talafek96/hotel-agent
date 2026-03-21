@@ -2,11 +2,22 @@
 {% block title %}Configuration{% endblock %}
 {% block topbar_title %}Configuration{% endblock %}
 {% block tutorial %}
-<div class="onboarding-hint" id="hint-config">
-    <button class="hint-dismiss" onclick="dismissHint('config')">&times;</button>
-    All settings live here — travelers, LLM, alerts, notifications, and API keys. Hover the <strong>i</strong> icon next to any key for setup instructions.
-</div>
-<script>showHint('config');</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('tour_config_done')) return;
+    var driverObj = window.driver.js.driver({
+        showProgress: true,
+        animate: true,
+        onDestroyed: function() { localStorage.setItem('tour_config_done', '1'); },
+        steps: [
+            { popover: { title: 'Configuration', description: 'All your settings live here — travelers, AI model, currency, alert thresholds, notifications, and API keys.' }},
+            { element: '#travelers_adults', popover: { title: 'Default Travelers', description: 'Set the default number of adults and children for price searches. Can be overridden per booking.', side: 'bottom' }},
+            { element: '.info-tooltip-trigger', popover: { title: 'API Key Help', description: 'Hover or click the (i) icon next to any API key for step-by-step instructions on how to get it.', side: 'bottom' }},
+        ]
+    });
+    driverObj.drive();
+});
+</script>
 {% endblock %}
 {% block content %}
 <h1>Edit Configuration</h1>

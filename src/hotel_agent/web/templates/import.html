@@ -2,11 +2,23 @@
 {% block title %}Import{% endblock %}
 {% block topbar_title %}Import Bookings{% endblock %}
 {% block tutorial %}
-<div class="onboarding-hint" id="hint-import">
-    <button class="hint-dismiss" onclick="dismissHint('import')">&times;</button>
-    Upload an Excel file with your bookings. The AI handles flexible column names — just make sure it has hotel names, dates, and prices. After importing, <a href="/bookings">review the results</a>.
-</div>
-<script>showHint('import');</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('tour_import_done')) return;
+    var driverObj = window.driver.js.driver({
+        showProgress: true,
+        animate: true,
+        onDestroyed: function() { localStorage.setItem('tour_import_done', '1'); },
+        steps: [
+            { popover: { title: 'Import Hotel Bookings', description: 'Upload an Excel file with your bookings. The AI handles flexible column names — just make sure it has hotel names, dates, and prices.' }},
+            { element: '#file', popover: { title: 'Choose Your File', description: 'Select an .xlsx file from your computer.', side: 'bottom' }},
+            { element: '#sheet', popover: { title: 'Sheet Name', description: 'Enter the exact name of the sheet/tab that contains your hotel data.', side: 'bottom' }},
+            { element: '.btn-primary', popover: { title: 'Start Import', description: 'Click Import to start. The AI will parse your data — this may take a minute for large files.', side: 'left' }},
+        ]
+    });
+    driverObj.drive();
+});
+</script>
 {% endblock %}
 {% block content %}
 <style>
@@ -103,7 +115,7 @@ function showImportProgress() {
             var msg = document.getElementById('import-msg');
             var result = document.getElementById('import-result');
 
-            var isError = html.indexOf('Import failed') >= 0;
+            var isError = html.indexOf('alert-error') >= 0;
             if (isError) {
                 spinner.className = 'import-spinner error';
                 title.textContent = 'Import failed';
@@ -122,7 +134,7 @@ function showImportProgress() {
                 result.style.color = '#166534';
             }
             setTimeout(function() {
-                document.documentElement.innerHTML = html;
+                window.location.reload();
             }, 3000);
         })
         .catch(function(err) {

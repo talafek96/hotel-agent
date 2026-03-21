@@ -153,6 +153,14 @@ toggleNewHotel();
         </label>
     </div>
     <div class="form-group">
+        <label>
+            <input type="checkbox" name="dinner_included" value="1"
+                   {% if booking.dinner_included %}checked{% endif %}
+                   style="width:auto; margin-right:.5rem;">
+            Dinner included
+        </label>
+    </div>
+    <div class="form-group">
         <label for="extras">Extras / Meal Plan</label>
         <input type="text" id="extras" name="extras" value="{{ booking.extras }}"
                placeholder="e.g. dinner included, half-board, airport shuttle">

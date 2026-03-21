@@ -452,6 +452,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         is_cancellable: str = Form(""),
         cancellation_deadline: str = Form(""),
         breakfast_included: str = Form(""),
+        dinner_included: str = Form(""),
         bathroom_type: str = Form("private"),
         extras: str = Form(""),
         notes: str = Form(""),
@@ -501,6 +502,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                         else None
                     ),
                     breakfast_included=breakfast_included == "1",
+                    dinner_included=dinner_included == "1",
                     bathroom_type=bathroom_type,
                     extras=extras,
                 )
@@ -568,6 +570,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         is_cancellable: str = Form(""),
         cancellation_deadline: str = Form(""),
         breakfast_included: str = Form(""),
+        dinner_included: str = Form(""),
         bathroom_type: str = Form("private"),
         extras: str = Form(""),
         notes: str = Form(""),
@@ -604,6 +607,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                     date_cls.fromisoformat(cancellation_deadline) if cancellation_deadline else None
                 )
                 booking.breakfast_included = breakfast_included == "1"
+                booking.dinner_included = dinner_included == "1"
                 booking.bathroom_type = bathroom_type
                 booking.extras = extras
 

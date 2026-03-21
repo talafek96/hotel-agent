@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     is_cancellable INTEGER NOT NULL DEFAULT 0,
     cancellation_deadline TEXT,
     breakfast_included INTEGER NOT NULL DEFAULT 0,
+    dinner_included INTEGER NOT NULL DEFAULT 0,
     bathroom_type TEXT DEFAULT 'private',
     platform TEXT DEFAULT '',
     booking_reference TEXT DEFAULT '',
@@ -323,6 +324,7 @@ class Database:
             int(booking.is_cancellable),
             date_to_str(booking.cancellation_deadline),
             int(booking.breakfast_included),
+            int(booking.dinner_included),
             booking.bathroom_type,
             booking.platform,
             booking.booking_reference,
@@ -337,7 +339,7 @@ class Database:
                 """UPDATE bookings SET
                    hotel_id=?, check_in=?, check_out=?, adults=?, children_ages=?,
                    room_type=?, booked_price=?, currency=?, is_cancellable=?,
-                   cancellation_deadline=?, breakfast_included=?, bathroom_type=?,
+                   cancellation_deadline=?, breakfast_included=?, dinner_included=?, bathroom_type=?,
                    platform=?, booking_reference=?, booking_url=?, extras=?, status=?, notes=?
                    WHERE id=?""",
                 (*params, existing_id),
@@ -349,9 +351,9 @@ class Database:
             """INSERT INTO bookings
                (hotel_id, check_in, check_out, adults, children_ages,
                 room_type, booked_price, currency, is_cancellable,
-                cancellation_deadline, breakfast_included, bathroom_type,
+                cancellation_deadline, breakfast_included, dinner_included, bathroom_type,
                 platform, booking_reference, booking_url, extras, status, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             params,
         )
         self.conn.commit()
@@ -386,6 +388,7 @@ class Database:
             is_cancellable=bool(r["is_cancellable"]),
             cancellation_deadline=parse_date(r["cancellation_deadline"]),
             breakfast_included=bool(r["breakfast_included"]),
+            dinner_included=bool(r["dinner_included"]) if "dinner_included" in r else False,
             bathroom_type=r["bathroom_type"],
             platform=r["platform"],
             booking_reference=r["booking_reference"],
@@ -409,7 +412,7 @@ class Database:
             """UPDATE bookings SET
                hotel_id=?, check_in=?, check_out=?, adults=?, children_ages=?,
                room_type=?, booked_price=?, currency=?, is_cancellable=?,
-               cancellation_deadline=?, breakfast_included=?, bathroom_type=?,
+               cancellation_deadline=?, breakfast_included=?, dinner_included=?, bathroom_type=?,
                platform=?, booking_reference=?, booking_url=?, extras=?, status=?, notes=?
                WHERE id=?""",
             (
@@ -424,6 +427,7 @@ class Database:
                 int(booking.is_cancellable),
                 date_to_str(booking.cancellation_deadline),
                 int(booking.breakfast_included),
+                int(booking.dinner_included),
                 booking.bathroom_type,
                 booking.platform,
                 booking.booking_reference,

@@ -73,6 +73,7 @@ class Booking:
     is_cancellable: bool = False
     cancellation_deadline: date | None = None
     breakfast_included: bool = False
+    dinner_included: bool = False
     bathroom_type: str = "private"
     platform: str = ""
     booking_reference: str = ""

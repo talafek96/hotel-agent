@@ -680,7 +680,7 @@ function validateAndImport() {
             var msg = document.getElementById('import-spinner-msg');
             var resultMsg = document.getElementById('import-result-msg');
 
-            var isError = result.html.indexOf('Import failed') >= 0 || result.html.indexOf('Please select') >= 0;
+            var isError = result.html.indexOf('alert-error') >= 0;
             if (isError) {
                 spinner.classList.add('error');
                 title.textContent = 'Import failed';
@@ -690,21 +690,20 @@ function validateAndImport() {
                 resultMsg.textContent = match ? match[1] : 'Check the error and try again.';
                 resultMsg.style.display = 'block';
                 resultMsg.style.color = '#991b1b';
-                // Stay on overlay for 3s then hide to show the error page
+                // Stay on overlay for 3s then reload to show the error
                 setTimeout(function() {
-                    document.documentElement.innerHTML = result.html;
+                    window.location.href = '/setup?step=6';
                 }, 3000);
             } else {
                 spinner.classList.add('success');
                 title.textContent = 'Import successful!';
                 msg.style.display = 'none';
-                var cIdx = result.html.indexOf('Imported '); var countMatch = null; if (cIdx >= 0) { var cSub = result.html.substring(cIdx); var cEnd = cSub.indexOf(' booking'); countMatch = [null, cSub.substring(9, cEnd > 9 ? cEnd : 12)]; }
-                resultMsg.textContent = countMatch ? countMatch[1] + ' booking(s) imported.' : 'Bookings imported successfully.';
+                resultMsg.textContent = 'Bookings imported successfully.';
                 resultMsg.style.display = 'block';
                 resultMsg.style.color = '#166534';
-                // Show success for 3s then load the result page
+                // Show success for 3s then navigate to Done step
                 setTimeout(function() {
-                    document.documentElement.innerHTML = result.html;
+                    window.location.href = '/setup?step=7';
                 }, 3000);
             }
         })

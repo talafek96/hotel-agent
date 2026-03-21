@@ -2,11 +2,22 @@
 {% block title %}Bookings{% endblock %}
 {% block topbar_title %}Bookings{% endblock %}
 {% block tutorial %}
-<div class="onboarding-hint" id="hint-bookings">
-    <button class="hint-dismiss" onclick="dismissHint('bookings')">&times;</button>
-    Review each booking — verify dates, prices, and hotel names are correct. Click a card to edit. When done, <a href="/scheduler">set up the Scheduler</a>.
-</div>
-<script>showHint('bookings');</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('tour_bookings_done')) return;
+    var driverObj = window.driver.js.driver({
+        showProgress: true,
+        animate: true,
+        onDestroyed: function() { localStorage.setItem('tour_bookings_done', '1'); },
+        steps: [
+            { popover: { title: 'Review Your Bookings', description: 'Your bookings were imported using AI. Please review each one to make sure dates, prices, and hotel names are correct.' }},
+            { element: '.card', popover: { title: 'Booking Card', description: 'Each card shows one hotel booking. Click it to edit details, correct mistakes, or add missing info.', side: 'bottom' }},
+            { element: '.sidebar-nav a[href="/scheduler"]', popover: { title: 'Next: Set Up Scheduler', description: 'Once you\'ve reviewed your bookings, set up the Scheduler to automatically check prices on a regular basis.', side: 'right' }},
+        ]
+    });
+    driverObj.drive();
+});
+</script>
 {% endblock %}
 {% block content %}
 <h1>Active Bookings ({{ bookings|length }})</h1>
