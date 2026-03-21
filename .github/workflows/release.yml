@@ -24,11 +24,6 @@ jobs:
             icon: assets/icon.png
             uv_url: https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-unknown-linux-gnu.tar.gz
             uv_extract: tar
-          - os: macos-13
-            platform: macos-x86_64
-            icon: assets/icon.icns
-            uv_url: https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-apple-darwin.tar.gz
-            uv_extract: tar
           - os: macos-latest
             platform: macos-arm64
             icon: assets/icon.icns
@@ -87,7 +82,11 @@ jobs:
         shell: bash
         run: |
           cd dist
-          zip -r HotelPriceTracker-${{ matrix.platform }}.zip HotelPriceTracker/
+          if command -v zip &> /dev/null; then
+            zip -r HotelPriceTracker-${{ matrix.platform }}.zip HotelPriceTracker/
+          else
+            7z a HotelPriceTracker-${{ matrix.platform }}.zip HotelPriceTracker/
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
