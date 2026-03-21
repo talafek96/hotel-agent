@@ -36,3 +36,4 @@ Thumbs.db
 .cognition/
 PROMPT.md
 .env_backup
+agent-fetched/
