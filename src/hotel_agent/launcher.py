@@ -27,6 +27,26 @@ _POLL_INTERVAL = 0.5
 _STARTUP_TIMEOUT = 120  # seconds to wait for server ready
 
 
+def _open_browser(url: str) -> None:
+    """Open URL in the default browser, handling WSL and headless environments."""
+    # WSL: try Windows browser via cmd.exe
+    if "microsoft" in os.uname().release.lower():
+        try:
+            subprocess.Popen(
+                ["cmd.exe", "/c", "start", url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return
+        except FileNotFoundError:
+            pass
+
+    try:
+        webbrowser.open(url)
+    except Exception:
+        log.info("Open this URL in your browser: %s", url)
+
+
 def _resolve_base_dir() -> Path:
     """Resolve the project root directory.
 
@@ -111,13 +131,13 @@ def _start_server(base_dir: Path, uv: Path) -> subprocess.Popen:  # type: ignore
 
 
 def _ensure_deps(base_dir: Path, uv: Path) -> None:
-    """Run ``uv sync`` if .venv does not exist (first-run bootstrap)."""
+    """Run ``uv sync --no-dev`` if .venv does not exist (first-run bootstrap)."""
     venv_dir = base_dir / ".venv"
     if venv_dir.exists():
         return
 
-    log.info("First run — installing dependencies via uv sync...")
-    cmd = [str(uv), "sync"]
+    log.info("First run — installing dependencies (this may take a minute)...")
+    cmd = [str(uv), "sync", "--no-dev"]
     result = subprocess.run(
         cmd,
         cwd=str(base_dir),
@@ -176,10 +196,10 @@ def _run_tray(server_proc: subprocess.Popen) -> None:  # type: ignore[type-arg]
         image = Image.open(icon_path)
 
     def open_dashboard(icon: pystray.Icon, item: pystray.MenuItem) -> None:  # type: ignore[name-defined]
-        webbrowser.open(URL)
+        _open_browser(URL)
 
     def open_settings(icon: pystray.Icon, item: pystray.MenuItem) -> None:  # type: ignore[name-defined]
-        webbrowser.open(f"{URL}/config")
+        _open_browser(f"{URL}/config")
 
     def quit_app(icon: pystray.Icon, item: pystray.MenuItem) -> None:  # type: ignore[name-defined]
         icon.stop()
@@ -354,7 +374,7 @@ def main() -> None:
     if is_server_running():
         log.info("Server already running at %s — opening browser.", URL)
         log.info("To stop the server, run this again with --stop")
-        webbrowser.open(URL)
+        _open_browser(URL)
         return
 
     # Resolve uv and ensure deps are installed
@@ -382,7 +402,7 @@ def main() -> None:
         sys.exit(1)
 
     log.info("Server ready at %s", URL)
-    webbrowser.open(URL)
+    _open_browser(URL)
 
     # Platform-specific run loop
     if sys.platform == "win32" or sys.platform == "darwin":
