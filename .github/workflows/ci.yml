@@ -31,3 +31,41 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --dev
       - run: uv run pytest --cov=hotel_agent --cov-report=term-missing
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --dev
+
+      - name: Start server and smoke-test web UI
+        run: |
+          cp config.example.yaml config.yaml
+          uv run hotel-agent serve --port 8470 --host 127.0.0.1 &
+          sleep 5
+
+          echo "Testing all pages..."
+          FAIL=0
+          for path in /setup / /hotels /bookings /snapshots /alerts /trends /import /scrape /scrapes /check /scheduler /config; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:8470${path}")
+            if [ "$STATUS" != "200" ] && [ "$STATUS" != "307" ]; then
+              echo "FAIL: $path -> $STATUS"
+              FAIL=1
+            else
+              echo "OK: $path -> $STATUS"
+            fi
+          done
+
+          # Complete setup (step 7 = "Done" which writes .setup_complete marker)
+          curl -s -X POST http://127.0.0.1:8470/setup -d "step=7" -o /dev/null
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8470/)
+          if [ "$STATUS" != "200" ]; then
+            echo "FAIL: dashboard after setup -> $STATUS"
+            FAIL=1
+          else
+            echo "OK: dashboard after setup -> $STATUS"
+          fi
+
+          kill %1 2>/dev/null || true
+          exit $FAIL
