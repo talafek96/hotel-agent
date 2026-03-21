@@ -308,9 +308,10 @@ def _run_tray(server_proc: subprocess.Popen) -> None:  # type: ignore[type-arg]
         _open_browser(f"{URL}/config")
 
     def quit_app(icon: pystray.Icon, item: pystray.MenuItem) -> None:  # type: ignore[name-defined]
+        # Just stop the icon — this causes icon.run() to return in the main thread.
+        # Do NOT call sys.exit() or os._exit() here — that leaves the main thread alive.
+        icon.visible = False
         icon.stop()
-        _kill_process_tree(server_proc)
-        sys.exit(0)
 
     icon = pystray.Icon(
         "hotel-price-tracker",
@@ -334,7 +335,13 @@ def _run_tray(server_proc: subprocess.Popen) -> None:  # type: ignore[type-arg]
 
     threading.Thread(target=_notify_first_run, daemon=True).start()
 
+    # icon.run() blocks until icon.stop() is called (from quit_app)
     icon.run()
+
+    # After icon.run() returns, clean up the server and exit
+    log.info("Tray icon closed — shutting down server...")
+    _kill_process_tree(server_proc)
+    log.info("Server stopped.")
 
 
 # ── Linux: daemon mode ────────────────────────────────
