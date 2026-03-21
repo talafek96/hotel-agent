@@ -223,7 +223,7 @@ def _run_linux_daemon(server_proc: subprocess.Popen, base_dir: Path) -> None:  #
 
     print(f"Hotel Price Tracker running at {URL}")
     print(f"PID file: {pid_path}")
-    print("Stop with: hotel-agent-gui --stop")
+    print(f"Stop with: {sys.argv[0]} --stop")
 
     try:
         server_proc.wait()
@@ -232,22 +232,69 @@ def _run_linux_daemon(server_proc: subprocess.Popen, base_dir: Path) -> None:  #
 
 
 def _stop_linux_daemon(base_dir: Path) -> None:
-    """Send SIGTERM to the running daemon using the PID file."""
+    """Stop the server by finding and killing the process on PORT."""
     pid_path = _pid_file(base_dir)
-    if not pid_path.exists():
-        print("No PID file found — server is not running.")
-        sys.exit(1)
 
-    pid = int(pid_path.read_text(encoding="utf-8").strip())
-    try:
-        os.kill(pid, signal.SIGTERM)
-        print(f"Sent SIGTERM to PID {pid}.")
-    except ProcessLookupError:
-        print(f"Process {pid} not found — removing stale PID file.")
+    if not is_server_running():
+        print(f"No server running on port {PORT}.")
         pid_path.unlink(missing_ok=True)
-    except PermissionError:
-        print(f"Permission denied sending signal to PID {pid}.")
-        sys.exit(1)
+        return
+
+    # Try PID file first (most reliable if launcher started the server)
+    if pid_path.exists():
+        pid = int(pid_path.read_text(encoding="utf-8").strip())
+        try:
+            os.kill(pid, signal.SIGTERM)
+            print(f"Server stopped (PID {pid}).")
+            pid_path.unlink(missing_ok=True)
+            return
+        except ProcessLookupError:
+            pid_path.unlink(missing_ok=True)
+        except PermissionError:
+            print(f"Permission denied for PID {pid}.")
+            sys.exit(1)
+
+    # Fall back to finding the process by port
+    found_pid = _find_pid_on_port(PORT)
+    if found_pid:
+        try:
+            os.kill(found_pid, signal.SIGTERM)
+            print(f"Server stopped (PID {found_pid} on port {PORT}).")
+        except ProcessLookupError:
+            print("Process already exited.")
+        except PermissionError:
+            print(f"Permission denied for PID {found_pid}. Try: sudo kill {found_pid}")
+            sys.exit(1)
+    else:
+        print(f"Could not find process on port {PORT}. Try: lsof -ti :{PORT} | xargs kill")
+
+
+def _find_pid_on_port(port: int) -> int | None:
+    """Find the PID of the process listening on the given port."""
+    try:
+        if sys.platform == "win32":
+            result = subprocess.run(
+                ["netstat", "-ano"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            for line in result.stdout.splitlines():
+                if f":{port}" in line and "LISTENING" in line:
+                    parts = line.split()
+                    return int(parts[-1])
+        else:
+            result = subprocess.run(
+                ["lsof", "-ti", f":{port}"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return int(result.stdout.strip().splitlines()[0])
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
+        pass
+    return None
 
 
 # ── Headless fallback ─────────────────────────────────
@@ -293,12 +340,7 @@ def main() -> None:
     # If server is already running, just open the browser
     if is_server_running():
         log.info("Server already running at %s — opening browser.", URL)
-        log.info(
-            "To stop the server:\n"
-            "  Linux/macOS:  lsof -ti :%d | xargs kill\n"
-            "  Windows:      Right-click the tray icon → Exit",
-            PORT,
-        )
+        log.info("To stop the server, run this again with --stop")
         webbrowser.open(URL)
         return
 

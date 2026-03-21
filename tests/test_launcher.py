@@ -151,12 +151,15 @@ class TestPidFile:
 class TestStopLinuxDaemon:
     """Tests for the --stop flag logic."""
 
-    def test_stop_sends_sigterm(self, tmp_path):
+    def test_stop_sends_sigterm_via_pid_file(self, tmp_path):
         pid_path = tmp_path / "data" / "hotel-agent.pid"
         pid_path.parent.mkdir(parents=True)
         pid_path.write_text("12345")
 
-        with patch("os.kill") as mock_kill:
+        with (
+            patch("hotel_agent.launcher.is_server_running", return_value=True),
+            patch("os.kill") as mock_kill,
+        ):
             _stop_linux_daemon(tmp_path)
             mock_kill.assert_called_once_with(12345, signal.SIGTERM)
 
@@ -165,10 +168,26 @@ class TestStopLinuxDaemon:
         pid_path.parent.mkdir(parents=True)
         pid_path.write_text("99999")
 
-        with patch("os.kill", side_effect=ProcessLookupError):
+        with (
+            patch("hotel_agent.launcher.is_server_running", return_value=True),
+            patch("os.kill", side_effect=ProcessLookupError),
+            patch("hotel_agent.launcher._find_pid_on_port", return_value=None),
+        ):
             _stop_linux_daemon(tmp_path)
         assert not pid_path.exists()
 
-    def test_stop_exits_if_no_pid_file(self, tmp_path):
-        with pytest.raises(SystemExit):
+    def test_stop_when_not_running(self, tmp_path, capsys):
+        with patch("hotel_agent.launcher.is_server_running", return_value=False):
             _stop_linux_daemon(tmp_path)
+        assert "No server running" in capsys.readouterr().out
+
+    def test_stop_falls_back_to_port_lookup(self, tmp_path):
+        """When no PID file exists, find process by port."""
+        with (
+            patch("hotel_agent.launcher.is_server_running", return_value=True),
+            patch("hotel_agent.launcher._find_pid_on_port", return_value=54321) as mock_find,
+            patch("os.kill") as mock_kill,
+        ):
+            _stop_linux_daemon(tmp_path)
+            mock_find.assert_called_once()
+            mock_kill.assert_called_once_with(54321, signal.SIGTERM)

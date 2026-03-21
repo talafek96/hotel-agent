@@ -696,7 +696,9 @@ def serve(
                 f"[red]Port {port} is already in use.[/red]\n"
                 f"Another server may be running. To stop it:\n"
                 f"  [bold]lsof -ti :{port} | xargs kill[/bold]   (Linux/macOS)\n"
-                f"  [bold]netstat -ano | findstr :{port}[/bold]    (Windows — note the PID, then taskkill /PID <pid>)\n"
+                f"  [bold]taskkill /F /PID <pid>[/bold]           (Windows — find PID with: netstat -ano | findstr :{port})\n"
+                f"\n"
+                f"Or if you started the server via the launcher, run it with [bold]--stop[/bold]."
             )
             raise typer.Exit(1)
 
