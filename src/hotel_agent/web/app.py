@@ -338,7 +338,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         if step == 6:
             if error or (import_result and not import_result.get("success")):
                 resp.headers["X-Import-Status"] = "error"
-                err_msg = error or (import_result or {}).get("message", "Unknown error")
+                err_msg = error or str((import_result or {}).get("message", "Unknown error"))
                 resp.headers["X-Import-Error"] = err_msg
             else:
                 resp.headers["X-Import-Status"] = "success"
@@ -801,7 +801,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         )
         resp.headers["X-Import-Status"] = "success" if result.get("success") else "error"
         if not result.get("success"):
-            resp.headers["X-Import-Error"] = result.get("message", "Unknown error")
+            resp.headers["X-Import-Error"] = str(result.get("message", "Unknown error"))
         return resp
 
     # ── Scrape Runs History ─────────────────────────
