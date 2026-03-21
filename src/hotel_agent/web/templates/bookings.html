@@ -2,20 +2,11 @@
 {% block title %}Bookings{% endblock %}
 {% block topbar_title %}Bookings{% endblock %}
 {% block tutorial %}
-<div class="tutorial-card" id="tutorial-bookings">
-    <button class="dismiss-btn" onclick="dismissTutorial('bookings')">&times;</button>
-    <h3>Review your imported bookings</h3>
-    <p>Your bookings were imported using AI parsing. Please review each one and:</p>
-    <ul>
-        <li>Verify <strong>dates</strong> (check-in, check-out) are correct</li>
-        <li>Check <strong>prices</strong> and <strong>currency</strong> match your actual booking</li>
-        <li>Confirm <strong>hotel names</strong> and <strong>cities</strong> are accurate</li>
-        <li>Fill in any <strong>missing fields</strong> (room type, platform, cancellation info)</li>
-    </ul>
-    <p>Click on a booking card to edit it.</p>
-    <p class="next-link">When you're done reviewing, <a href="/scheduler">set up the Scheduler</a> to check prices automatically.</p>
+<div class="onboarding-hint" id="hint-bookings">
+    <button class="hint-dismiss" onclick="dismissHint('bookings')">&times;</button>
+    Review each booking — verify dates, prices, and hotel names are correct. Click a card to edit. When done, <a href="/scheduler">set up the Scheduler</a>.
 </div>
-<script>showTutorial('bookings');</script>
+<script>showHint('bookings');</script>
 {% endblock %}
 {% block content %}
 <h1>Active Bookings ({{ bookings|length }})</h1>

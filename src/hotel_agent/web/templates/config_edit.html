@@ -2,12 +2,11 @@
 {% block title %}Configuration{% endblock %}
 {% block topbar_title %}Configuration{% endblock %}
 {% block tutorial %}
-<div class="tutorial-card" id="tutorial-config">
-    <button class="dismiss-btn" onclick="dismissTutorial('config')">&times;</button>
-    <h3>Configure your tracker</h3>
-    <p>This page controls all settings — travelers, LLM provider, alert thresholds, notifications, and API keys. Hover the <strong>i</strong> icon next to any API key field for instructions on how to get it.</p>
+<div class="onboarding-hint" id="hint-config">
+    <button class="hint-dismiss" onclick="dismissHint('config')">&times;</button>
+    All settings live here — travelers, LLM, alerts, notifications, and API keys. Hover the <strong>i</strong> icon next to any key for setup instructions.
 </div>
-<script>showTutorial('config');</script>
+<script>showHint('config');</script>
 {% endblock %}
 {% block content %}
 <h1>Edit Configuration</h1>

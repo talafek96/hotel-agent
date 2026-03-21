@@ -2,18 +2,11 @@
 {% block title %}Scheduler{% endblock %}
 {% block topbar_title %}Scheduler{% endblock %}
 {% block tutorial %}
-<div class="tutorial-card" id="tutorial-scheduler">
-    <button class="dismiss-btn" onclick="dismissTutorial('scheduler')">&times;</button>
-    <h3>Automate price checking</h3>
-    <p>The scheduler runs the full pipeline (scrape prices, analyze, send alerts) automatically on a schedule you choose:</p>
-    <ul>
-        <li><strong>Interval</strong> — every N hours or days</li>
-        <li><strong>Daily</strong> — at a specific time each day</li>
-        <li><strong>Weekly</strong> — on specific days at a chosen time</li>
-    </ul>
-    <p>Set your preferred schedule below and click <strong>Start</strong>. The scheduler runs inside the web server — as long as the server is running, prices will be checked on time.</p>
+<div class="onboarding-hint" id="hint-scheduler">
+    <button class="hint-dismiss" onclick="dismissHint('scheduler')">&times;</button>
+    Set a schedule to automatically check prices and send alerts. Choose interval, daily, or weekly — the scheduler runs inside the web server.
 </div>
-<script>showTutorial('scheduler');</script>
+<script>showHint('scheduler');</script>
 {% endblock %}
 {% block content %}
 

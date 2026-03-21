@@ -364,6 +364,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "stats": stats,
                 "alerts": alerts,
                 "bookings": booking_data[:10],
+                "onboarding": _configured_summary(),
             },
         )
 

@@ -142,23 +142,39 @@
             display: block; pointer-events: auto;
         }
 
-        /* ── Tutorial cards ── */
-        .tutorial-card {
-            display: none; background: linear-gradient(135deg, #eff6ff, #f0fdf4);
-            border: 1px solid #bfdbfe; border-radius: .75rem; padding: 1.5rem;
-            margin-bottom: 1.5rem; position: relative;
+        /* ── Onboarding hints ── */
+        .onboarding-hint {
+            display: none; font-size: .8rem; color: #64748b; background: #f8fafc;
+            border-left: 3px solid #3b82f6; padding: .5rem .75rem; margin-bottom: 1rem;
+            border-radius: 0 .25rem .25rem 0; position: relative;
         }
-        .tutorial-card.visible { display: block; }
-        .tutorial-card h3 { font-size: 1rem; color: #1e40af; margin-bottom: .5rem; }
-        .tutorial-card p { font-size: .85rem; color: #1e40af; margin-bottom: .5rem; }
-        .tutorial-card ul { font-size: .85rem; color: #1e40af; margin-left: 1.25rem; margin-bottom: .5rem; }
-        .tutorial-card .dismiss-btn {
-            position: absolute; top: .75rem; right: .75rem; background: none;
-            border: none; cursor: pointer; font-size: 1.2rem; color: #64748b;
-            line-height: 1;
+        .onboarding-hint.visible { display: block; }
+        .onboarding-hint a { color: #3b82f6; font-weight: 500; }
+        .onboarding-hint .hint-dismiss {
+            position: absolute; top: .25rem; right: .5rem; background: none;
+            border: none; cursor: pointer; color: #94a3b8; font-size: .9rem;
         }
-        .tutorial-card .dismiss-btn:hover { color: #1e293b; }
-        .tutorial-card .next-link { font-size: .85rem; font-weight: 600; }
+        .onboarding-hint .hint-dismiss:hover { color: #475569; }
+
+        .getting-started {
+            background: #fff; border-radius: .75rem; box-shadow: 0 1px 3px rgba(0,0,0,.08);
+            padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #e2e8f0;
+        }
+        .getting-started h3 { font-size: 1rem; margin-bottom: .75rem; color: #1e293b; }
+        .getting-started .gs-item {
+            display: flex; align-items: center; gap: .5rem; padding: .5rem 0;
+            font-size: .875rem; border-bottom: 1px solid #f1f5f9;
+        }
+        .getting-started .gs-item:last-child { border-bottom: none; }
+        .getting-started .gs-check { font-size: 1.1rem; flex-shrink: 0; }
+        .getting-started .gs-done { color: #22c55e; }
+        .getting-started .gs-pending { color: #cbd5e1; }
+        .getting-started .gs-dismiss {
+            display: block; text-align: right; margin-top: .75rem;
+            font-size: .75rem; color: #94a3b8; cursor: pointer;
+            background: none; border: none;
+        }
+        .getting-started .gs-dismiss:hover { color: #64748b; }
 
         /* ── Responsive ── */
         @media (max-width: 1024px) {
@@ -176,18 +192,23 @@
         }
     </style>
     <script>
-    function showTutorial(id) {
+    function showHint(id) {
         document.addEventListener('DOMContentLoaded', function() {
-            if (!localStorage.getItem('tutorial_' + id + '_dismissed')) {
-                var el = document.getElementById('tutorial-' + id);
+            if (!localStorage.getItem('hint_' + id + '_dismissed')) {
+                var el = document.getElementById('hint-' + id);
                 if (el) el.classList.add('visible');
             }
         });
     }
-    function dismissTutorial(id) {
-        localStorage.setItem('tutorial_' + id + '_dismissed', '1');
-        var el = document.getElementById('tutorial-' + id);
+    function dismissHint(id) {
+        localStorage.setItem('hint_' + id + '_dismissed', '1');
+        var el = document.getElementById('hint-' + id);
         if (el) el.classList.remove('visible');
+    }
+    function dismissGettingStarted() {
+        localStorage.setItem('getting_started_dismissed', '1');
+        var el = document.getElementById('getting-started');
+        if (el) el.style.display = 'none';
     }
     </script>
 </head>

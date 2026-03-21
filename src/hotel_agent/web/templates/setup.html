@@ -686,7 +686,7 @@ function validateAndImport() {
                 title.textContent = 'Import failed';
                 msg.style.display = 'none';
                 // Extract error message
-                var match = result.html.match(/Import failed: ([^<]+)/);
+                var idx = result.html.indexOf('Import failed: '); var match = null; if (idx >= 0) { var sub = result.html.substring(idx + 15); var end = sub.indexOf('<'); match = [null, end > 0 ? sub.substring(0, end) : sub.substring(0, 100)]; }
                 resultMsg.textContent = match ? match[1] : 'Check the error and try again.';
                 resultMsg.style.display = 'block';
                 resultMsg.style.color = '#991b1b';
@@ -698,7 +698,7 @@ function validateAndImport() {
                 spinner.classList.add('success');
                 title.textContent = 'Import successful!';
                 msg.style.display = 'none';
-                var countMatch = result.html.match(/Imported (\d+)/);
+                var cIdx = result.html.indexOf('Imported '); var countMatch = null; if (cIdx >= 0) { var cSub = result.html.substring(cIdx); var cEnd = cSub.indexOf(' booking'); countMatch = [null, cSub.substring(9, cEnd > 9 ? cEnd : 12)]; }
                 resultMsg.textContent = countMatch ? countMatch[1] + ' booking(s) imported.' : 'Bookings imported successfully.';
                 resultMsg.style.display = 'block';
                 resultMsg.style.color = '#166534';
