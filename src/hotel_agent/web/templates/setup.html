@@ -122,6 +122,21 @@
             50% { width: 40%; margin-left: 30%; }
             100% { width: 10%; margin-left: 90%; }
         }
+        .import-spinner.success { background: #f0fdf4; }
+        .import-spinner.success h3 { color: #166534; }
+        .import-spinner.success .progress-bar-fill {
+            animation: none; width: 100%; margin-left: 0;
+            background: #22c55e; transition: width .5s ease;
+        }
+        .import-spinner.error { background: #fef2f2; }
+        .import-spinner.error h3 { color: #991b1b; }
+        .import-spinner.error .progress-bar-fill {
+            animation: none; width: 100%; margin-left: 0;
+            background: #ef4444; transition: width .5s ease;
+        }
+        .import-spinner .result-msg {
+            display: none; font-size: .85rem; margin-top: .75rem;
+        }
 
         .checklist { list-style: none; }
         .checklist li { padding: .5rem 0; font-size: .9rem; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: .5rem; }
@@ -567,10 +582,11 @@
 </div>
 
 <div class="import-overlay" id="import-overlay">
-    <div class="import-spinner">
-        <h3>Importing bookings...</h3>
-        <p>The AI is parsing your Excel file. This may take a minute depending on the file size.</p>
+    <div class="import-spinner" id="import-spinner">
+        <h3 id="import-spinner-title">Importing bookings...</h3>
+        <p id="import-spinner-msg">The AI is parsing your Excel file. This may take a minute depending on the file size.</p>
         <div class="progress-bar"><div class="progress-bar-fill"></div></div>
+        <p class="result-msg" id="import-result-msg"></p>
     </div>
 </div>
 
@@ -648,9 +664,59 @@ function validateAndImport() {
         sheetInput.focus();
         return false;
     }
+
     // Show progress overlay
-    document.getElementById('import-overlay').classList.add('active');
-    return true;
+    var overlay = document.getElementById('import-overlay');
+    overlay.classList.add('active');
+
+    // Submit via fetch so we can show result before navigating
+    var form = document.getElementById('setup-form');
+    var formData = new FormData(form);
+    fetch('/setup', {method: 'POST', body: formData})
+        .then(function(resp) { return resp.text().then(function(html) { return {html: html, ok: resp.ok}; }); })
+        .then(function(result) {
+            var spinner = document.getElementById('import-spinner');
+            var title = document.getElementById('import-spinner-title');
+            var msg = document.getElementById('import-spinner-msg');
+            var resultMsg = document.getElementById('import-result-msg');
+
+            var isError = result.html.indexOf('Import failed') >= 0 || result.html.indexOf('Please select') >= 0;
+            if (isError) {
+                spinner.classList.add('error');
+                title.textContent = 'Import failed';
+                msg.style.display = 'none';
+                // Extract error message
+                var match = result.html.match(/Import failed: ([^<]+)/);
+                resultMsg.textContent = match ? match[1] : 'Check the error and try again.';
+                resultMsg.style.display = 'block';
+                resultMsg.style.color = '#991b1b';
+                // Stay on overlay for 3s then hide to show the error page
+                setTimeout(function() {
+                    document.documentElement.innerHTML = result.html;
+                }, 3000);
+            } else {
+                spinner.classList.add('success');
+                title.textContent = 'Import successful!';
+                msg.style.display = 'none';
+                var countMatch = result.html.match(/Imported (\d+)/);
+                resultMsg.textContent = countMatch ? countMatch[1] + ' booking(s) imported.' : 'Bookings imported successfully.';
+                resultMsg.style.display = 'block';
+                resultMsg.style.color = '#166534';
+                // Show success for 3s then load the result page
+                setTimeout(function() {
+                    document.documentElement.innerHTML = result.html;
+                }, 3000);
+            }
+        })
+        .catch(function(err) {
+            var spinner = document.getElementById('import-spinner');
+            spinner.classList.add('error');
+            document.getElementById('import-spinner-title').textContent = 'Connection error';
+            document.getElementById('import-spinner-msg').textContent = err.message;
+            setTimeout(function() { overlay.classList.remove('active'); }, 3000);
+        });
+
+    return false; // Prevent normal form submit
 }
 
 async function loadModels(provider) {

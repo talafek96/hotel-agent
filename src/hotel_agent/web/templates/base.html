@@ -175,6 +175,21 @@
             body { flex-direction: column; }
         }
     </style>
+    <script>
+    function showTutorial(id) {
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!localStorage.getItem('tutorial_' + id + '_dismissed')) {
+                var el = document.getElementById('tutorial-' + id);
+                if (el) el.classList.add('visible');
+            }
+        });
+    }
+    function dismissTutorial(id) {
+        localStorage.setItem('tutorial_' + id + '_dismissed', '1');
+        var el = document.getElementById('tutorial-' + id);
+        if (el) el.classList.remove('visible');
+    }
+    </script>
 </head>
 <body>
 
@@ -205,20 +220,6 @@
         {% block content %}{% endblock %}
     </div>
 </div>
-
-<script>
-function showTutorial(id) {
-    if (!localStorage.getItem('tutorial_' + id + '_dismissed')) {
-        var el = document.getElementById('tutorial-' + id);
-        if (el) el.classList.add('visible');
-    }
-}
-function dismissTutorial(id) {
-    localStorage.setItem('tutorial_' + id + '_dismissed', '1');
-    var el = document.getElementById('tutorial-' + id);
-    if (el) el.classList.remove('visible');
-}
-</script>
 
 </body>
 </html>
