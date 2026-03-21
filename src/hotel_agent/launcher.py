@@ -293,6 +293,12 @@ def main() -> None:
     # If server is already running, just open the browser
     if is_server_running():
         log.info("Server already running at %s — opening browser.", URL)
+        log.info(
+            "To stop the server:\n"
+            "  Linux/macOS:  hotel-agent-gui --stop  (or: lsof -ti :%d | xargs kill)\n"
+            "  Windows:      Right-click the tray icon → Exit",
+            PORT,
+        )
         webbrowser.open(URL)
         return
 
