@@ -130,11 +130,16 @@ def _start_server(base_dir: Path, uv: Path) -> subprocess.Popen:  # type: ignore
     return subprocess.Popen(cmd, **kwargs)
 
 
+ISSUES_URL = "https://github.com/talafek96/hotel-agent/issues"
+
+
 def _ensure_deps(base_dir: Path, uv: Path) -> None:
     """Run ``uv sync --no-dev`` if .venv does not exist (first-run bootstrap)."""
     venv_dir = base_dir / ".venv"
     if venv_dir.exists():
         return
+
+    log_path = _data_dir(base_dir) / "setup.log"
 
     print("=" * 50)
     print("  First-time setup — installing dependencies...")
@@ -152,32 +157,69 @@ def _ensure_deps(base_dir: Path, uv: Path) -> None:
             text=True,
         )
         assert proc.stdout is not None
-        for line in proc.stdout:
-            line = line.rstrip()
-            if line:
-                # Show download/install progress to the user
-                print(f"  {line}")
+        lines_seen = 0
+        with open(log_path, "w", encoding="utf-8") as log_file:
+            for line in proc.stdout:
+                log_file.write(line)
+                line = line.rstrip()
+                if not line:
+                    continue
+                lines_seen += 1
+                # Show a compact progress indicator, not the full output
+                lower = line.lower()
+                if any(
+                    kw in lower
+                    for kw in (
+                        "downloading",
+                        "creating",
+                        "resolved",
+                        "installed",
+                        "building",
+                        "built",
+                        "using",
+                    )
+                ):
+                    print(f"  {line}")
+                elif lines_seen % 10 == 0:
+                    print(f"  ... ({lines_seen} operations)")
         proc.wait(timeout=300)
     except subprocess.TimeoutExpired:
         proc.kill()
         print("\nError: dependency installation timed out after 5 minutes.")
-        print("Check your internet connection and try again.")
+        print(f"  Log file: {log_path}")
+        print("  Check your internet connection and try again.")
+        _print_issue_hint(log_path)
         sys.exit(1)
     except FileNotFoundError:
         print(f"\nError: uv not found at {uv}")
-        print("Make sure the tools/ directory contains the uv binary.")
+        print("  Make sure the tools/ directory contains the uv binary.")
+        _print_issue_hint(log_path)
         sys.exit(1)
 
     if proc.returncode != 0:
-        print("\nError: dependency installation failed.")
-        print("Check the output above for details.")
-        log_path = _data_dir(base_dir) / "uv-sync-error.log"
-        print(f"If you need help, share: {log_path}")
+        print(f"\nError: dependency installation failed (exit code {proc.returncode}).")
+        print(f"  Log file: {log_path}")
+        # Show last few lines of the log on screen
+        if log_path.exists():
+            tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-10:]
+            print()
+            for ln in tail:
+                print(f"  {ln}")
+        _print_issue_hint(log_path)
         sys.exit(1)
 
     print()
     print("  Setup complete!")
     print()
+
+
+def _print_issue_hint(log_path: Path) -> None:
+    """Print a hint to open a GitHub issue."""
+    print()
+    print("  If this error persists, please open an issue:")
+    print(f"    {ISSUES_URL}/new")
+    print(f"  Attach the log file: {log_path}")
+    print("  Include a description of what went wrong and the error message.")
 
 
 def _ensure_config(base_dir: Path) -> None:
