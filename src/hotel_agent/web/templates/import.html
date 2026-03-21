@@ -2,11 +2,40 @@
 {% block title %}Import{% endblock %}
 {% block topbar_title %}Import Bookings{% endblock %}
 {% block content %}
+<style>
+.import-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 1000; align-items: center; justify-content: center;
+}
+.import-overlay.active { display: flex; }
+.import-spinner {
+    background: #fff; border-radius: .75rem; padding: 2.5rem 3rem;
+    text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.2); max-width: 400px;
+}
+.import-spinner h3 { margin-bottom: .75rem; font-size: 1.1rem; }
+.import-spinner p { color: #64748b; font-size: .85rem; margin-bottom: 1.25rem; }
+.progress-bar {
+    width: 100%; height: .5rem; background: #e2e8f0; border-radius: 9999px; overflow: hidden;
+}
+.progress-bar-fill {
+    height: 100%; width: 30%; background: #3b82f6; border-radius: 9999px;
+    animation: progress-indeterminate 1.5s ease-in-out infinite;
+}
+@keyframes progress-indeterminate {
+    0% { width: 10%; margin-left: 0; }
+    50% { width: 40%; margin-left: 30%; }
+    100% { width: 10%; margin-left: 90%; }
+}
+</style>
+
 <h1>Import from Excel</h1>
 
 {% if result %}
     {% if result.success %}
-    <div class="alert-box alert-success">{{ result.message }}</div>
+    <div class="alert-box alert-success">
+        {{ result.message }}
+        <br>Go to <a href="/bookings">Bookings</a> to review and correct the imported data.
+    </div>
     {% else %}
     <div class="alert-box alert-error">Import failed: {{ result.message }}</div>
     {% endif %}
@@ -14,7 +43,7 @@
 
 <div class="card">
     <h2>Upload Excel File</h2>
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" onsubmit="showImportProgress()">
         <div class="form-group">
             <label for="file">Excel File (.xlsx)</label>
             <input type="file" id="file" name="file" accept=".xlsx,.xls" required>
@@ -30,6 +59,20 @@
         <button type="submit" class="btn btn-primary">Import</button>
     </form>
 </div>
+
+<div class="import-overlay" id="import-overlay">
+    <div class="import-spinner">
+        <h3>Importing bookings...</h3>
+        <p>The AI is parsing your Excel file. This may take a minute depending on the file size.</p>
+        <div class="progress-bar"><div class="progress-bar-fill"></div></div>
+    </div>
+</div>
+
+<script>
+function showImportProgress() {
+    document.getElementById('import-overlay').classList.add('active');
+}
+</script>
 
 {% if result and result.success and result.pairs %}
 <div class="card">

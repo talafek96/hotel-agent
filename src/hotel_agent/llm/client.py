@@ -49,7 +49,7 @@ def call_llm(
     system_prompt: str = "",
     model_override: str | None = None,
     temperature: float = 0.1,
-    max_tokens: int = 4096,
+    max_tokens: int = 16384,
     response_format: dict | None = None,
 ) -> str:
     """Call the LLM and return the text response."""
@@ -76,7 +76,13 @@ def call_llm(
 
     response = litellm.completion(**kwargs)
     content = response.choices[0].message.content
-    log.info(f"LLM response: {len(content)} chars")
+    finish_reason = response.choices[0].finish_reason
+
+    log.info(f"LLM response: {len(content)} chars, finish_reason={finish_reason}")
+
+    if finish_reason == "length":
+        log.warning("LLM response was truncated (hit max_tokens limit)")
+
     return str(content)
 
 

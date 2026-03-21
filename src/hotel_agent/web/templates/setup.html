@@ -536,12 +536,21 @@
 
     <div class="card" style="background:#f8fafc;">
         <h3 style="font-size:.9rem; margin-bottom:.5rem;">How to stop the server</h3>
-        <p style="font-size:.8rem; color:#475569;">
-            <strong>Windows:</strong> Right-click the tray icon and choose <strong>Exit</strong>.
-            <strong>Linux/macOS:</strong> Run the launcher again with <code>--stop</code>.
-            Or press <strong>Ctrl+C</strong> in the terminal.
-        </p>
+        <p style="font-size:.8rem; color:#475569;" id="shutdown-instructions"></p>
     </div>
+    <script>
+    (function() {
+        var el = document.getElementById('shutdown-instructions');
+        var ua = navigator.userAgent.toLowerCase();
+        if (ua.indexOf('win') >= 0) {
+            el.innerHTML = 'Right-click the <strong>tray icon</strong> (hidden icons area in the taskbar) and choose <strong>Exit</strong>.';
+        } else if (ua.indexOf('mac') >= 0) {
+            el.innerHTML = 'Run the launcher again with <code>--stop</code>, or press <strong>Ctrl+C</strong> in the terminal.';
+        } else {
+            el.innerHTML = 'Run the launcher again with <code>--stop</code>, or press <strong>Ctrl+C</strong> in the terminal.';
+        }
+    })();
+    </script>
 
     <div class="btn-row">
         <a href="/setup?step=6" class="btn btn-secondary">Back</a>
