@@ -8,6 +8,10 @@ document.addEventListener('DOMContentLoaded', function() {
     var driverObj = window.driver.js.driver({
         showProgress: true,
         animate: true,
+        overlayColor: "rgba(0,0,0,0.6)",
+        stagePadding: 8,
+        stageRadius: 8,
+        popoverOffset: 12,
         onDestroyed: function() { localStorage.setItem('tour_scheduler_done', '1'); },
         steps: [
             { popover: { title: 'Automate Price Checking', description: 'The scheduler runs the full pipeline (scrape prices, analyze, send alerts) automatically on a schedule you choose.' }},

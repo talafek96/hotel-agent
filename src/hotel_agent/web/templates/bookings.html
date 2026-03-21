@@ -8,6 +8,10 @@ document.addEventListener('DOMContentLoaded', function() {
     var driverObj = window.driver.js.driver({
         showProgress: true,
         animate: true,
+        overlayColor: "rgba(0,0,0,0.6)",
+        stagePadding: 8,
+        stageRadius: 8,
+        popoverOffset: 12,
         onDestroyed: function() { localStorage.setItem('tour_bookings_done', '1'); },
         steps: [
             { popover: { title: 'Review Your Bookings', description: 'Your bookings were imported using AI. Please review each one to make sure dates, prices, and hotel names are correct.' }},

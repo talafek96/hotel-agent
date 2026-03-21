@@ -9,6 +9,10 @@ document.addEventListener('DOMContentLoaded', function() {
     var driverObj = window.driver.js.driver({
         showProgress: true,
         animate: true,
+        overlayColor: "rgba(0,0,0,0.6)",
+        stagePadding: 8,
+        stageRadius: 8,
+        popoverOffset: 12,
         onDestroyed: function() { localStorage.setItem('tour_scrape_done', '1'); },
         steps: [
             { popover: { title: 'Fetch Hotel Prices', description: 'This page queries Google Hotels via SerpAPI to get current prices from Booking.com, Agoda, Expedia, and more — all in a single query per hotel.' }},

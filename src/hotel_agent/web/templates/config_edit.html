@@ -8,6 +8,10 @@ document.addEventListener('DOMContentLoaded', function() {
     var driverObj = window.driver.js.driver({
         showProgress: true,
         animate: true,
+        overlayColor: "rgba(0,0,0,0.6)",
+        stagePadding: 8,
+        stageRadius: 8,
+        popoverOffset: 12,
         onDestroyed: function() { localStorage.setItem('tour_config_done', '1'); },
         steps: [
             { popover: { title: 'Configuration', description: 'All your settings live here — travelers, AI model, currency, alert thresholds, notifications, and API keys.' }},
@@ -83,7 +87,40 @@ document.addEventListener('DOMContentLoaded', function() {
     <h2>Currency</h2>
     <div class="form-group">
         <label for="currency_base">Base Currency</label>
-        <input type="text" id="currency_base" name="currency_base" value="{{ config.currency.base }}" placeholder="USD">
+        <select id="currency_base" name="currency_base" style="max-width:320px;">
+            {% set currencies = [
+                ("USD", "US Dollar", "\U0001F1FA\U0001F1F8"),
+                ("EUR", "Euro", "\U0001F1EA\U0001F1FA"),
+                ("GBP", "British Pound", "\U0001F1EC\U0001F1E7"),
+                ("ILS", "Israeli Shekel", "\U0001F1EE\U0001F1F1"),
+                ("JPY", "Japanese Yen", "\U0001F1EF\U0001F1F5"),
+                ("CAD", "Canadian Dollar", "\U0001F1E8\U0001F1E6"),
+                ("AUD", "Australian Dollar", "\U0001F1E6\U0001F1FA"),
+                ("CHF", "Swiss Franc", "\U0001F1E8\U0001F1ED"),
+                ("CNY", "Chinese Yuan", "\U0001F1E8\U0001F1F3"),
+                ("INR", "Indian Rupee", "\U0001F1EE\U0001F1F3"),
+                ("KRW", "South Korean Won", "\U0001F1F0\U0001F1F7"),
+                ("SGD", "Singapore Dollar", "\U0001F1F8\U0001F1EC"),
+                ("THB", "Thai Baht", "\U0001F1F9\U0001F1ED"),
+                ("TWD", "Taiwan Dollar", "\U0001F1F9\U0001F1FC"),
+                ("NZD", "New Zealand Dollar", "\U0001F1F3\U0001F1FF"),
+                ("SEK", "Swedish Krona", "\U0001F1F8\U0001F1EA"),
+                ("NOK", "Norwegian Krone", "\U0001F1F3\U0001F1F4"),
+                ("DKK", "Danish Krone", "\U0001F1E9\U0001F1F0"),
+                ("PLN", "Polish Zloty", "\U0001F1F5\U0001F1F1"),
+                ("CZK", "Czech Koruna", "\U0001F1E8\U0001F1FF"),
+                ("HUF", "Hungarian Forint", "\U0001F1ED\U0001F1FA"),
+                ("BRL", "Brazilian Real", "\U0001F1E7\U0001F1F7"),
+                ("MXN", "Mexican Peso", "\U0001F1F2\U0001F1FD"),
+                ("ZAR", "South African Rand", "\U0001F1FF\U0001F1E6"),
+                ("TRY", "Turkish Lira", "\U0001F1F9\U0001F1F7"),
+                ("AED", "UAE Dirham", "\U0001F1E6\U0001F1EA"),
+                ("SAR", "Saudi Riyal", "\U0001F1F8\U0001F1E6"),
+            ] %}
+            {% for code, name, flag in currencies %}
+            <option value="{{ code }}" {% if config.currency.base == code %}selected{% endif %}>{{ flag }} {{ code }} — {{ name }}</option>
+            {% endfor %}
+        </select>
     </div>
     <div class="form-group">
         <label for="currency_rates">Exchange Rates (YAML format, one per line)</label>

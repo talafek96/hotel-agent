@@ -8,6 +8,10 @@ document.addEventListener('DOMContentLoaded', function() {
     var driverObj = window.driver.js.driver({
         showProgress: true,
         animate: true,
+        overlayColor: "rgba(0,0,0,0.6)",
+        stagePadding: 8,
+        stageRadius: 8,
+        popoverOffset: 12,
         onDestroyed: function() { localStorage.setItem('tour_import_done', '1'); },
         steps: [
             { popover: { title: 'Import Hotel Bookings', description: 'Upload an Excel file with your bookings. The AI handles flexible column names — just make sure it has hotel names, dates, and prices.' }},
