@@ -1,0 +1,109 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x86_64
+            icon: assets/icon.png
+            uv_url: https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz
+            uv_extract: tar
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+            icon: assets/icon.png
+            uv_url: https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-unknown-linux-gnu.tar.gz
+            uv_extract: tar
+          - os: macos-13
+            platform: macos-x86_64
+            icon: assets/icon.icns
+            uv_url: https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-apple-darwin.tar.gz
+            uv_extract: tar
+          - os: macos-latest
+            platform: macos-arm64
+            icon: assets/icon.icns
+            uv_url: https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-apple-darwin.tar.gz
+            uv_extract: tar
+          - os: windows-latest
+            platform: windows-x86_64
+            icon: assets/icon.ico
+            uv_url: https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip
+            uv_extract: zip
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --group dev --extra gui
+
+      - name: Build launcher
+        shell: bash
+        run: |
+          uv run pyinstaller \
+            --name HotelPriceTracker \
+            --windowed \
+            --icon=${{ matrix.icon }} \
+            --noconfirm \
+            --clean \
+            --collect-data pystray \
+            src/hotel_agent/launcher.py
+
+      - name: Assemble distribution
+        shell: bash
+        run: |
+          mkdir -p dist/HotelPriceTracker/tools dist/HotelPriceTracker/assets
+          cp -r src dist/HotelPriceTracker/
+          cp pyproject.toml uv.lock dist/HotelPriceTracker/
+          cp config.example.yaml .env.example dist/HotelPriceTracker/
+          cp -r assets dist/HotelPriceTracker/
+
+      - name: Download uv binary
+        shell: bash
+        run: |
+          curl -sSL "${{ matrix.uv_url }}" -o uv_download
+          if [ "${{ matrix.uv_extract }}" = "tar" ]; then
+            tar xzf uv_download
+            cp */uv dist/HotelPriceTracker/tools/
+          else
+            unzip -j uv_download 'uv.exe' -d dist/HotelPriceTracker/tools
+          fi
+          rm -rf uv_download uv-*/
+
+      - name: Create archive
+        shell: bash
+        run: |
+          cd dist
+          zip -r HotelPriceTracker-${{ matrix.platform }}.zip HotelPriceTracker/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HotelPriceTracker-${{ matrix.platform }}
+          path: dist/HotelPriceTracker-${{ matrix.platform }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: '*.zip'
+          generate_release_notes: true

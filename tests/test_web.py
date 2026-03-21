@@ -21,6 +21,9 @@ def _web_env(tmp_path):
     config_file.write_text("database:\n  path: ''\n")
     db_path = str(tmp_path / "test.db")
 
+    # Create setup completion marker so middleware doesn't redirect
+    (tmp_path / ".setup_complete").write_text("1")
+
     env = {"DATABASE_PATH": db_path}
     with patch.dict(os.environ, env, clear=True):
         # Patch default config path so it uses our temp file
@@ -42,6 +45,9 @@ def seeded_env(tmp_path):
     db_path = str(tmp_path / "test.db")
     config_file = tmp_path / "config.yaml"
     config_file.write_text(f"database:\n  path: '{db_path}'\n")
+
+    # Create setup completion marker so middleware doesn't redirect
+    (tmp_path / ".setup_complete").write_text("1")
 
     db = Database(db_path)
     hotel_id = db.upsert_hotel(Hotel(name="Test Hotel", city="Tokyo"))

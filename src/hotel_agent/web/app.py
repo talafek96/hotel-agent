@@ -44,6 +44,228 @@ def create_app(config_path: str | None = None) -> FastAPI:
     def get_db() -> Database:
         return Database(config.db_path)
 
+    # ── Setup wizard ──────────────────────────────────
+
+    def _setup_complete() -> bool:
+        """Check if the first-run setup wizard has been completed."""
+        return Path(config.db_path).parent.joinpath(".setup_complete").exists()
+
+    def _mark_setup_complete() -> None:
+        """Create the setup completion marker file."""
+        marker = Path(config.db_path).parent / ".setup_complete"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("1", encoding="utf-8")
+
+    def _read_env_secrets() -> dict[str, str]:
+        """Read current .env values for pre-filling setup forms."""
+        from dotenv import dotenv_values
+
+        env_path = Path(".env")
+        if env_path.exists():
+            return {k: v for k, v in dotenv_values(env_path).items() if v}
+        return {}
+
+    def _configured_summary() -> dict:
+        """Build a summary of what's configured (for the Done step)."""
+        secrets = _read_env_secrets()
+        has_llm = bool(
+            secrets.get("OPENAI_API_KEY")
+            or secrets.get("GEMINI_API_KEY")
+            or secrets.get("ANTHROPIC_API_KEY")
+        )
+        llm_detail = ""
+        if has_llm:
+            llm_detail = f"{config.llm.provider} / {config.llm.model}"
+
+        has_serpapi = bool(secrets.get("SERPAPI_KEY"))
+        has_telegram = bool(secrets.get("TELEGRAM_BOT_TOKEN") and secrets.get("TELEGRAM_CHAT_ID"))
+        has_email = bool(secrets.get("GMAIL_USER") and secrets.get("GMAIL_APP_PASSWORD"))
+
+        # Check for imported bookings
+        imported = False
+        import_detail = ""
+        try:
+            with get_db() as db:
+                active = db.get_active_bookings()
+                if active:
+                    imported = True
+                    import_detail = f"{len(active)} booking(s) imported"
+        except Exception:
+            pass
+
+        return {
+            "llm": has_llm,
+            "llm_detail": llm_detail,
+            "serpapi": has_serpapi,
+            "telegram": has_telegram,
+            "email": has_email,
+            "imported": imported,
+            "import_detail": import_detail,
+        }
+
+    @app.middleware("http")
+    async def setup_redirect_middleware(request: Request, call_next):
+        """Redirect to setup wizard if first-run setup hasn't been completed."""
+        path = request.url.path
+        if (
+            not _setup_complete()
+            and not path.startswith("/setup")
+            and not path.startswith("/api/")
+            and path != "/favicon.ico"
+        ):
+            return RedirectResponse("/setup", status_code=307)
+        return await call_next(request)
+
+    @app.get("/setup", response_class=HTMLResponse)
+    async def setup_page(request: Request, step: int = 1, skip_import: int = 0):
+        secrets = _read_env_secrets()
+        ctx: dict = {
+            "step": step,
+            "secrets": secrets,
+            "llm_provider": config.llm.provider,
+            "llm_model": config.llm.model,
+            "error": None,
+            "import_result": None,
+            "configured": _configured_summary() if step == 6 else {},
+        }
+        return templates.TemplateResponse(request, "setup.html", ctx)
+
+    @app.post("/setup", response_class=HTMLResponse)
+    async def setup_save(
+        request: Request,
+        step: int = Form(1),
+        # Step 2: LLM
+        llm_provider: str = Form(""),
+        openai_api_key: str = Form(""),
+        openai_model: str = Form(""),
+        gemini_api_key: str = Form(""),
+        gemini_model: str = Form(""),
+        anthropic_api_key: str = Form(""),
+        anthropic_model: str = Form(""),
+        # Step 3: SerpAPI
+        serpapi_key: str = Form(""),
+        # Step 4: Notifications
+        telegram_bot_token: str = Form(""),
+        telegram_chat_id: str = Form(""),
+        gmail_user: str = Form(""),
+        gmail_app_password: str = Form(""),
+        # Step 5: Import
+        file: UploadFile | None = File(None),  # noqa: B008
+        sheet: str = Form(""),
+        table: str = Form(""),
+    ):
+        nonlocal config
+        error = None
+        import_result = None
+        next_step = step + 1
+
+        try:
+            if step == 1:
+                pass  # Welcome — just advance
+
+            elif step == 2:
+                # Save LLM config
+                if llm_provider:
+                    config.llm.provider = llm_provider
+                    if llm_provider == "openai" and openai_model:
+                        config.llm.model = openai_model
+                    elif llm_provider == "gemini" and gemini_model:
+                        config.llm.model = gemini_model
+                    elif llm_provider == "anthropic" and anthropic_model:
+                        config.llm.model = anthropic_model
+                    save_config(config, config_path)
+
+                # Save API keys (only non-empty values)
+                if openai_api_key:
+                    config.openai_api_key = SecretStr(openai_api_key)
+                if gemini_api_key:
+                    config.gemini_api_key = SecretStr(gemini_api_key)
+                if anthropic_api_key:
+                    config.anthropic_api_key = SecretStr(anthropic_api_key)
+                save_secrets(config)
+
+            elif step == 3:
+                if serpapi_key:
+                    config.serpapi_key = SecretStr(serpapi_key)
+                    save_secrets(config)
+
+            elif step == 4:
+                if telegram_bot_token:
+                    config.telegram_bot_token = SecretStr(telegram_bot_token)
+                if telegram_chat_id:
+                    config.telegram_chat_id = SecretStr(telegram_chat_id)
+                if gmail_user:
+                    config.gmail_user = SecretStr(gmail_user)
+                if gmail_app_password:
+                    config.gmail_app_password = SecretStr(gmail_app_password)
+
+                # Enable notifications if credentials were provided
+                if telegram_bot_token and telegram_chat_id:
+                    config.notifications.telegram.enabled = True
+                if gmail_user and gmail_app_password:
+                    config.notifications.email.triggered_enabled = True
+                save_secrets(config)
+                save_config(config, config_path)
+
+            elif step == 5:
+                # Excel import (optional)
+                if file and file.filename and sheet:
+                    from ..llm.excel_parser import excel_to_models, parse_excel_with_llm
+
+                    suffix = Path(file.filename).suffix
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                        shutil.copyfileobj(file.file, tmp)
+                        tmp_path = tmp.name
+
+                    try:
+                        records = parse_excel_with_llm(config, tmp_path, sheet, table or None)
+                        pairs = excel_to_models(records, config.travelers)
+
+                        with get_db() as db:
+                            saved = 0
+                            for hotel, booking in pairs:
+                                hotel_id = db.upsert_hotel(hotel)
+                                booking.hotel_id = hotel_id
+                                db.upsert_booking(booking)
+                                saved += 1
+
+                        import_result = {
+                            "success": True,
+                            "message": f"Imported {saved} booking(s) successfully.",
+                        }
+                    except Exception as e:
+                        log.exception("Setup import failed")
+                        import_result = {"success": False, "message": str(e)}
+                        next_step = step  # Stay on import step on error
+                    finally:
+                        Path(tmp_path).unlink(missing_ok=True)
+                # If no file uploaded, just advance
+
+            elif step == 6:
+                # Done — mark setup complete and redirect to dashboard
+                _mark_setup_complete()
+                return RedirectResponse("/", status_code=303)
+
+        except Exception as e:
+            log.exception("Setup step %s failed", step)
+            error = str(e)
+            next_step = step  # Stay on same step on error
+
+        # Reload config to reflect saved changes
+        config = load_config(config_path)
+
+        secrets = _read_env_secrets()
+        ctx: dict = {
+            "step": next_step,
+            "secrets": secrets,
+            "llm_provider": config.llm.provider,
+            "llm_model": config.llm.model,
+            "error": error,
+            "import_result": import_result,
+            "configured": _configured_summary() if next_step == 6 else {},
+        }
+        return templates.TemplateResponse(request, "setup.html", ctx)
+
     # ── Dashboard ──────────────────────────────────
     @app.get("/", response_class=HTMLResponse)
     async def dashboard(request: Request):
