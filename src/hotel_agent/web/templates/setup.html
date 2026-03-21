@@ -665,8 +665,17 @@ function validateAndImport() {
         return false;
     }
 
-    // Show progress overlay
+    // Show progress overlay — reset state from any previous attempt
     var overlay = document.getElementById('import-overlay');
+    var spinner = document.getElementById('import-spinner');
+    spinner.className = 'import-spinner';
+    document.getElementById('import-spinner-title').textContent = 'Importing bookings...';
+    var msg = document.getElementById('import-spinner-msg');
+    msg.textContent = 'The AI is parsing your Excel file. This may take a minute depending on the file size.';
+    msg.style.display = '';
+    var resultMsg = document.getElementById('import-result-msg');
+    resultMsg.style.display = 'none';
+    resultMsg.textContent = '';
     overlay.classList.add('active');
 
     // Submit via fetch so we can show result before navigating

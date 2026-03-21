@@ -107,6 +107,16 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
 function showImportProgress() {
     var overlay = document.getElementById('import-overlay');
+    // Reset state from any previous attempt
+    var spinner = document.getElementById('import-spinner');
+    spinner.className = 'import-spinner';
+    document.getElementById('import-title').textContent = 'Importing bookings...';
+    var msgEl = document.getElementById('import-msg');
+    msgEl.textContent = 'The AI is parsing your Excel file. This may take a minute depending on the file size.';
+    msgEl.style.display = '';
+    var resultEl = document.getElementById('import-result');
+    resultEl.style.display = 'none';
+    resultEl.textContent = '';
     overlay.classList.add('active');
 
     var form = document.querySelector('form');
