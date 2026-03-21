@@ -68,9 +68,11 @@ dist: build
 	cp -r assets $(DIST_DIR)/
 	# Copy the built launcher
 	cp -r dist/$(DIST_NAME)/* $(DIST_DIR)/ 2>/dev/null || true
+	# Create zip
+	cd dist && zip -r $(DIST_NAME)-$(PLATFORM).zip $(DIST_NAME)/
 	@echo ""
-	@echo "Distribution ready at $(DIST_DIR)/"
-	@echo "Add the platform-specific uv binary to $(DIST_DIR)/tools/ before zipping."
+	@echo "Distribution ready: dist/$(DIST_NAME)-$(PLATFORM).zip"
+	@echo "Note: add the platform-specific uv binary to $(DIST_DIR)/tools/ before shipping."
 
 clean:
 	rm -rf build/ dist/ *.spec __pycache__
