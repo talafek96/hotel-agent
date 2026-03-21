@@ -1,4 +1,4 @@
-.PHONY: help install install-gui lint format typecheck test check build dist dist-ci dist-docker clean
+.PHONY: help install install-gui lint format typecheck test check build dist release dist-ci dist-docker clean
 
 .DEFAULT_GOAL := help
 
@@ -31,12 +31,14 @@ test: ## Run test suite (pytest)
 check: lint format-check typecheck test ## Run all quality checks
 
 # ── Version ───────────────────────────────────────────
-# Format: YYYY.MM.DD[+N.gSHA] where N = commits since last tag
-# Tagged commit:  2026.03.21
-# Dev build:      2026.03.21+5.gabc1234
-# No tags:        0.0.0+abc1234
+# Tags: vYYYY.MM.DD (first of day), vYYYY.MM.DD-N (patches)
+# git describe output -> version:
+#   v2026.03.21           -> 2026.03.21
+#   v2026.03.21-1         -> 2026.03.21-1
+#   v2026.03.21-3-gabcdef -> 2026.03.21+3.gabcdef (dev build, 3 commits after tag)
+#   (no tags)             -> 0.0.0+SHA
 
-VERSION := $(shell V=$$(git describe --tags --match 'v*' 2>/dev/null | sed 's/^v//' | sed 's/-/+/' | sed 's/-/./'); if [ -z "$$V" ]; then V="0.0.0+$$(git rev-parse --short HEAD)"; fi; echo "$$V")
+VERSION := $(shell V=$$(git describe --tags --match 'v*' 2>/dev/null | sed 's/^v//' | sed 's/-\([0-9]*\)-g/+\1.g/' || true); if [ -z "$$V" ]; then V="0.0.0+$$(git rev-parse --short HEAD)"; fi; echo "$$V")
 
 # ── Build & Distribution ──────────────────────────────
 
@@ -86,12 +88,34 @@ dist: build ## Package distribution zip for current platform
 clean: ## Remove build artifacts
 	rm -rf build/ dist/ *.spec __pycache__
 
+# ── Release ───────────────────────────────────────────
+
+release: ## Tag a release (vYYYY.MM.DD or vYYYY.MM.DD-N) and push
+	@TODAY=$$(date -u +%Y.%m.%d); \
+	EXISTING=$$(git tag -l "v$$TODAY" "v$$TODAY-*" | sort -V); \
+	if [ -z "$$EXISTING" ]; then \
+		TAG="v$$TODAY"; \
+	else \
+		LAST=$$(echo "$$EXISTING" | tail -1); \
+		if [ "$$LAST" = "v$$TODAY" ]; then \
+			TAG="v$$TODAY-1"; \
+		else \
+			N=$$(echo "$$LAST" | sed "s/v$$TODAY-//"); \
+			TAG="v$$TODAY-$$((N + 1))"; \
+		fi; \
+	fi; \
+	echo "Tagging: $$TAG"; \
+	git tag "$$TAG"; \
+	git push origin "$$TAG"; \
+	echo "Tag $$TAG pushed — release workflow will build all platforms."
+
 # ── Multi-platform Distribution ───────────────────────
 
 dist-ci: ## Build all platforms via GitHub Actions (requires gh CLI)
 	@command -v gh >/dev/null 2>&1 || { echo "Error: gh CLI not found. Install: https://cli.github.com"; exit 1; }
 	@echo "Triggering multi-platform build on GitHub Actions..."
 	@echo "Version: $(VERSION)"
+	@rm -rf dist
 	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	gh workflow run release.yml --ref "$$BRANCH"
 	@echo "Waiting for workflow to start..."
