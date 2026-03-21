@@ -306,8 +306,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
                         Path(tmp_path).unlink(missing_ok=True)
 
             elif step == 7:
-                # Done — mark setup complete and redirect to dashboard
+                # Done — mark setup complete
                 _mark_setup_complete()
+                # Redirect to bookings if data was imported, otherwise dashboard
+                summary = _configured_summary()
+                if summary["imported"]:
+                    return RedirectResponse("/bookings", status_code=303)
                 return RedirectResponse("/", status_code=303)
 
         except Exception as e:

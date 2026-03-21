@@ -529,8 +529,9 @@
 
     {% if configured.imported %}
     <div class="info-box">
-        <strong>Next step:</strong> Head to the <a href="/bookings">Bookings</a> tab to review your imported data.
-        Check that dates, prices, and hotel names look correct. The AI does its best, but some fields may need manual corrections.
+        <strong>What happens next:</strong> You'll be taken to the <strong>Bookings</strong> page to review your imported data.
+        Check that dates, prices, and hotel names are correct — the AI does its best, but some fields may need manual corrections.
+        After that, consider setting up the <strong>Scheduler</strong> to automatically check prices on a regular basis.
     </div>
     {% endif %}
 
@@ -554,7 +555,11 @@
 
     <div class="btn-row">
         <a href="/setup?step=6" class="btn btn-secondary">Back</a>
+        {% if configured.imported %}
+        <button type="submit" class="btn btn-success">Review Bookings</button>
+        {% else %}
         <button type="submit" class="btn btn-success">Go to Dashboard</button>
+        {% endif %}
     </div>
 
     {% endif %}

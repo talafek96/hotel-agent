@@ -1,6 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Import{% endblock %}
 {% block topbar_title %}Import Bookings{% endblock %}
+{% block tutorial %}
+<div class="tutorial-card" id="tutorial-import">
+    <button class="dismiss-btn" onclick="dismissTutorial('import')">&times;</button>
+    <h3>Import your hotel bookings</h3>
+    <p>Upload an Excel file with your hotel bookings. The AI will parse the data — your columns don't need exact names, but should resemble: Hotel Name, City, Check-in, Check-out, Price, Currency, Platform.</p>
+    <p>After importing, go to <a href="/bookings">Bookings</a> to review and correct any parsing errors.</p>
+</div>
+<script>showTutorial('import');</script>
+{% endblock %}
 {% block content %}
 <style>
 .import-overlay {

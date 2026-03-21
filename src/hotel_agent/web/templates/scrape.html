@@ -2,6 +2,15 @@
 {% from "_macros.html" import platform_badge %}
 {% block title %}Scrape{% endblock %}
 {% block topbar_title %}Fetch Prices{% endblock %}
+{% block tutorial %}
+<div class="tutorial-card" id="tutorial-scrape">
+    <button class="dismiss-btn" onclick="dismissTutorial('scrape')">&times;</button>
+    <h3>Check current hotel prices</h3>
+    <p>This page fetches live prices from Google Hotels via SerpAPI for all your tracked bookings. It checks Booking.com, Agoda, Expedia, and more in a single query per hotel.</p>
+    <p>After fetching, go to <a href="/check">Price Check</a> to compare against your booked prices and see if there are better deals.</p>
+</div>
+<script>showTutorial('scrape');</script>
+{% endblock %}
 {% block content %}
 <h1>Fetch Hotel Prices (SerpAPI)</h1>
 

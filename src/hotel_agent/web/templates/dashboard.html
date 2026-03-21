@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 {% from "_macros.html" import platform_badge %}
 {% block title %}Dashboard{% endblock %}
+{% block tutorial %}
+<div class="tutorial-card" id="tutorial-dashboard">
+    <button class="dismiss-btn" onclick="dismissTutorial('dashboard')">&times;</button>
+    <h3>Welcome to your Hotel Price Tracker!</h3>
+    <p>This is your dashboard — a quick overview of your tracked hotels, recent alerts, and system status.</p>
+    <ul>
+        <li><strong>Import bookings</strong> from Excel via the <a href="/import">Import</a> page</li>
+        <li><strong>Scrape prices</strong> to check current rates via <a href="/scrape">Scrape</a></li>
+        <li><strong>Set up the scheduler</strong> to check prices automatically via <a href="/scheduler">Scheduler</a></li>
+        <li><strong>Configure alerts</strong> and API keys via <a href="/config">Config</a></li>
+    </ul>
+</div>
+<script>showTutorial('dashboard');</script>
+{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
 
