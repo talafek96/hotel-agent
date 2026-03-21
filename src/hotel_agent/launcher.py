@@ -128,7 +128,11 @@ def _start_server(base_dir: Path, uv: Path) -> subprocess.Popen:  # type: ignore
     }
 
     if sys.platform == "win32":
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+        kwargs["creationflags"] = (
+            subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+        )
+    else:
+        kwargs["start_new_session"] = True  # new process group for killpg
 
     return subprocess.Popen(cmd, **kwargs)
 
@@ -243,6 +247,33 @@ def _data_dir(base_dir: Path) -> Path:
     return d
 
 
+def _kill_process_tree(proc: subprocess.Popen) -> None:  # type: ignore[type-arg]
+    """Kill a process and all its children (works on Windows, Linux, macOS)."""
+    pid = proc.pid
+    try:
+        if sys.platform == "win32":
+            # taskkill /T kills the process tree on Windows
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                capture_output=True,
+                timeout=10,
+            )
+        else:
+            # On Unix, kill the process group
+            import signal as _sig
+
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(os.getpgid(pid), _sig.SIGTERM)
+    except Exception:
+        pass
+    # Final fallback: kill the process directly
+    try:
+        proc.kill()
+        proc.wait(timeout=5)
+    except Exception:
+        pass
+
+
 def _pid_file(base_dir: Path) -> Path:
     return _data_dir(base_dir) / "hotel-agent.pid"
 
@@ -278,16 +309,7 @@ def _run_tray(server_proc: subprocess.Popen) -> None:  # type: ignore[type-arg]
 
     def quit_app(icon: pystray.Icon, item: pystray.MenuItem) -> None:  # type: ignore[name-defined]
         icon.stop()
-        # On Windows, terminate() only kills the parent (uv.exe), not child processes.
-        # Use kill() which sends SIGKILL on Unix or TerminateProcess on Windows.
-        if sys.platform == "win32":
-            server_proc.kill()
-        else:
-            server_proc.terminate()
-        try:
-            server_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            server_proc.kill()
+        _kill_process_tree(server_proc)
         sys.exit(0)
 
     icon = pystray.Icon(
@@ -324,11 +346,7 @@ def _run_linux_daemon(server_proc: subprocess.Popen, base_dir: Path) -> None:  #
     pid_path.write_text(str(os.getpid()), encoding="utf-8")
 
     def _handle_term(signum: int, frame: object) -> None:
-        server_proc.terminate()
-        try:
-            server_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            server_proc.kill()
+        _kill_process_tree(server_proc)
         pid_path.unlink(missing_ok=True)
         sys.exit(0)
 
@@ -420,11 +438,7 @@ def _run_headless(server_proc: subprocess.Popen) -> None:  # type: ignore[type-a
     print("Press Ctrl+C to stop.")
 
     def _handle_term(signum: int, frame: object) -> None:
-        server_proc.terminate()
-        try:
-            server_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            server_proc.kill()
+        _kill_process_tree(server_proc)
         sys.exit(0)
 
     signal.signal(signal.SIGINT, _handle_term)
@@ -434,7 +448,7 @@ def _run_headless(server_proc: subprocess.Popen) -> None:  # type: ignore[type-a
     try:
         server_proc.wait()
     except KeyboardInterrupt:
-        server_proc.terminate()
+        _kill_process_tree(server_proc)
 
 
 # ── Auto-start on boot ────────────────────────────────
@@ -575,7 +589,7 @@ def main() -> None:
                     server_log.read_text(encoding="utf-8", errors="replace").splitlines()[-20:]
                 ),
             )
-        server_proc.terminate()
+        _kill_process_tree(server_proc)
         sys.exit(1)
 
     log.info("Server ready at %s", URL)
