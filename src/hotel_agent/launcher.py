@@ -20,9 +20,9 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT = 8470
-URL = f"http://{HOST}:{PORT}"
+URL = f"http://localhost:{PORT}"
 _POLL_INTERVAL = 0.5
 _STARTUP_TIMEOUT = 120  # seconds to wait for server ready
 
@@ -82,14 +82,16 @@ def _resolve_uv_path(base_dir: Path) -> Path:
     )
 
 
-def is_server_running(host: str = HOST, port: int = PORT) -> bool:
+def is_server_running(host: str = "127.0.0.1", port: int = PORT) -> bool:
     """Check if the server is already listening on the given port."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(1)
         return s.connect_ex((host, port)) == 0
 
 
-def _wait_for_server(host: str = HOST, port: int = PORT, timeout: float = _STARTUP_TIMEOUT) -> bool:
+def _wait_for_server(
+    host: str = "127.0.0.1", port: int = PORT, timeout: float = _STARTUP_TIMEOUT
+) -> bool:
     """Block until the server is accepting connections or timeout expires."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

@@ -36,6 +36,21 @@ def create_app(config_path: str | None = None) -> FastAPI:
     if config_path is None:
         config_path = os.environ.get("HOTEL_AGENT_CONFIG", "config.yaml")
     app = FastAPI(title="Hotel Price Tracker")
+
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(request: Request, exc: Exception):
+        """Log full traceback for any unhandled exception (500 errors)."""
+        import traceback
+
+        tb = traceback.format_exception(type(exc), exc, exc.__traceback__)
+        log.error(
+            "Unhandled exception on %s %s:\n%s",
+            request.method,
+            request.url.path,
+            "".join(tb),
+        )
+        return HTMLResponse("Internal Server Error", status_code=500)
+
     templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
     templates.env.globals["platform_url"] = platform_url
     templates.env.globals["platform_urls_json"] = json_mod.dumps(PLATFORM_URLS)
