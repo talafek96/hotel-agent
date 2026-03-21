@@ -101,6 +101,14 @@ hotel-agent serve --port 3000  # Custom port
 
 All commands accept `--config / -c` to specify a config file (defaults to `config.yaml`).
 
+### Stopping the Server
+
+| Platform | Method |
+|----------|--------|
+| **Windows** | Right-click the tray icon → Exit |
+| **Linux/macOS** | Run the launcher again with `--stop` |
+| **Terminal** | Press Ctrl+C in the terminal running `hotel-agent serve` |
+
 ## Architecture
 
 ```

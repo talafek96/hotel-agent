@@ -437,6 +437,78 @@ def _run_headless(server_proc: subprocess.Popen) -> None:  # type: ignore[type-a
         server_proc.terminate()
 
 
+# ── Auto-start on boot ────────────────────────────────
+
+
+def _set_autostart(base_dir: Path, *, enable: bool) -> None:
+    """Register or unregister the launcher to run on OS startup."""
+    exe = str(Path(sys.executable).resolve()) if getattr(sys, "frozen", False) else None
+    app_name = "HotelPriceTracker"
+
+    if sys.platform == "win32":
+        import winreg  # type: ignore[import-not-found]
+
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+            if enable:
+                path = exe or "uv run --no-dev hotel-agent-gui"
+                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, f'"{path}"')
+                print(f"Autostart enabled: {app_name} will start on login.")
+            else:
+                with contextlib.suppress(FileNotFoundError):
+                    winreg.DeleteValue(key, app_name)
+                print(f"Autostart disabled: {app_name} removed from startup.")
+            winreg.CloseKey(key)
+        except OSError as e:
+            print(f"Failed to modify startup registry: {e}")
+            sys.exit(1)
+
+    elif sys.platform == "darwin":
+        plist_dir = Path.home() / "Library" / "LaunchAgents"
+        plist_path = plist_dir / f"com.{app_name.lower()}.plist"
+        if enable:
+            plist_dir.mkdir(parents=True, exist_ok=True)
+            cmd = exe or str(base_dir / "HotelPriceTracker")
+            plist_path.write_text(
+                f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.{app_name.lower()}</string>
+<key>ProgramArguments</key><array><string>{cmd}</string></array>
+<key>RunAtLoad</key><true/>
+</dict></plist>
+""",
+                encoding="utf-8",
+            )
+            print(f"Autostart enabled: {plist_path}")
+        else:
+            plist_path.unlink(missing_ok=True)
+            print(f"Autostart disabled: removed {plist_path}")
+
+    else:
+        # Linux: ~/.config/autostart desktop entry
+        autostart_dir = Path.home() / ".config" / "autostart"
+        desktop_path = autostart_dir / f"{app_name}.desktop"
+        if enable:
+            autostart_dir.mkdir(parents=True, exist_ok=True)
+            cmd = exe or str(base_dir / "HotelPriceTracker")
+            desktop_path.write_text(
+                f"""[Desktop Entry]
+Type=Application
+Name={app_name}
+Exec={cmd}
+Hidden=false
+X-GNOME-Autostart-enabled=true
+""",
+                encoding="utf-8",
+            )
+            print(f"Autostart enabled: {desktop_path}")
+        else:
+            desktop_path.unlink(missing_ok=True)
+            print(f"Autostart disabled: removed {desktop_path}")
+
+
 # ── Entry point ──────────────────────────────────────
 
 
@@ -460,9 +532,17 @@ def main() -> None:
     )
     log.info("Launcher starting — base_dir=%s", base_dir)
 
-    # Handle --stop flag (Linux)
+    # Handle --stop flag
     if "--stop" in sys.argv:
         _stop_linux_daemon(base_dir)
+        return
+
+    # Handle --autostart / --no-autostart
+    if "--autostart" in sys.argv:
+        _set_autostart(base_dir, enable=True)
+        return
+    if "--no-autostart" in sys.argv:
+        _set_autostart(base_dir, enable=False)
         return
 
     # If server is already running, just open the browser

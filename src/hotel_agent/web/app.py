@@ -156,9 +156,10 @@ def create_app(config_path: str | None = None) -> FastAPI:
             "secrets": secrets,
             "llm_provider": config.llm.provider,
             "llm_model": config.llm.model,
+            "config": config,
             "error": None,
             "import_result": None,
-            "configured": _configured_summary() if step == 6 else {},
+            "configured": _configured_summary() if step == 7 else {},
         }
         return templates.TemplateResponse(request, "setup.html", ctx)
 
@@ -182,7 +183,11 @@ def create_app(config_path: str | None = None) -> FastAPI:
         telegram_chat_id: str = Form(""),
         gmail_user: str = Form(""),
         gmail_app_password: str = Form(""),
-        # Step 5: Import
+        # Step 5: Settings
+        travelers_adults: int = Form(0),
+        travelers_children: str = Form(""),
+        currency_base: str = Form(""),
+        # Step 6: Import
         file: UploadFile | None = File(None),  # noqa: B008
         sheet: str = Form(""),
         table: str = Form(""),
@@ -243,6 +248,19 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 save_config(config, config_path)
 
             elif step == 5:
+                if not is_skip:
+                    # Save travelers and currency settings
+                    if travelers_adults > 0:
+                        config.travelers.adults = travelers_adults
+                    ages: list[int] = []
+                    if travelers_children.strip():
+                        ages = [int(a.strip()) for a in travelers_children.split(",") if a.strip()]
+                    config.travelers.children_ages = ages
+                    if currency_base.strip():
+                        config.currency.base = currency_base.strip().upper()
+                    save_config(config, config_path)
+
+            elif step == 6:
                 if is_skip:
                     pass  # Skip — advance to done
                 elif not file or not file.filename:
@@ -285,7 +303,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                     finally:
                         Path(tmp_path).unlink(missing_ok=True)
 
-            elif step == 6:
+            elif step == 7:
                 # Done — mark setup complete and redirect to dashboard
                 _mark_setup_complete()
                 return RedirectResponse("/", status_code=303)
@@ -304,9 +322,10 @@ def create_app(config_path: str | None = None) -> FastAPI:
             "secrets": secrets,
             "llm_provider": config.llm.provider,
             "llm_model": config.llm.model,
+            "config": config,
             "error": error,
             "import_result": import_result,
-            "configured": _configured_summary() if next_step == 6 else {},
+            "configured": _configured_summary() if next_step == 7 else {},
         }
         return templates.TemplateResponse(request, "setup.html", ctx)
 

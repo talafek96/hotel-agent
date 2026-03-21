@@ -146,7 +146,7 @@
 
     <!-- Step indicator -->
     <div class="steps">
-        {% for i in range(1, 7) %}
+        {% for i in range(1, 8) %}
         <div class="step-dot {% if i < step %}done{% elif i == step %}active{% endif %}"></div>
         {% endfor %}
     </div>
@@ -155,7 +155,7 @@
     <div class="alert-box alert-error">{{ error }}</div>
     {% endif %}
 
-    <form method="post" {% if step == 5 %}enctype="multipart/form-data"{% endif %} id="setup-form">
+    <form method="post" {% if step == 6 %}enctype="multipart/form-data"{% endif %} id="setup-form">
     <input type="hidden" name="step" value="{{ step }}">
     <input type="hidden" name="skip" id="skip-field" value="">
 
@@ -357,8 +357,46 @@
         </div>
     </div>
 
-    <!-- ── Step 5: Excel Import ── -->
+    <!-- ── Step 5: Settings ── -->
     {% elif step == 5 %}
+    <div class="card">
+        <h2>Basic Settings</h2>
+        <p class="subtitle">
+            Configure your default travelers and currency. You can change these anytime from the Config page.
+        </p>
+
+        <h3 style="font-size:.95rem; margin-bottom:.75rem;">Travelers (Default)</h3>
+        <div style="display:flex; gap:1rem;">
+            <div class="form-group" style="flex:1;">
+                <label for="travelers_adults">Adults</label>
+                <input type="number" id="travelers_adults" name="travelers_adults" value="{{ config.travelers.adults }}" min="1" max="10">
+            </div>
+            <div class="form-group" style="flex:2;">
+                <label for="travelers_children">Children Ages (comma-separated)</label>
+                <input type="text" id="travelers_children" name="travelers_children"
+                       value="{{ config.travelers.children_ages | join(', ') if config.travelers.children_ages else '' }}"
+                       placeholder="e.g. 4, 7">
+            </div>
+        </div>
+
+        <h3 style="font-size:.95rem; margin-bottom:.75rem; margin-top:1rem; padding-top:1rem; border-top:1px solid #e2e8f0;">Currency</h3>
+        <div class="form-group">
+            <label for="currency_base">Base Currency</label>
+            <input type="text" id="currency_base" name="currency_base" value="{{ config.currency.base }}" placeholder="USD" style="max-width:120px;">
+            <p class="help-text">Your home currency for price comparisons (e.g. USD, EUR, ILS)</p>
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <a href="/setup?step=4" class="btn btn-secondary">Back</a>
+        <div style="display:flex; gap:.75rem; align-items:center;">
+            <a href="#" class="skip-link" onclick="skipStep(); return false;">Skip for now</a>
+            <button type="submit" class="btn btn-primary">Next</button>
+        </div>
+    </div>
+
+    <!-- ── Step 6: Excel Import ── -->
+    {% elif step == 6 %}
     <div class="card">
         <h2>Import Your Bookings</h2>
         <p class="subtitle">
@@ -405,15 +443,15 @@
     </div>
 
     <div class="btn-row">
-        <a href="/setup?step=4" class="btn btn-secondary">Back</a>
+        <a href="/setup?step=5" class="btn btn-secondary">Back</a>
         <div style="display:flex; gap:.75rem;">
             <a href="#" class="skip-link" style="align-self:center;" onclick="skipStep(); return false;">Skip for now</a>
             <button type="submit" class="btn btn-primary" onclick="return validateAndImport()">Import &amp; Continue</button>
         </div>
     </div>
 
-    <!-- ── Step 6: Done ── -->
-    {% elif step == 6 %}
+    <!-- ── Step 7: Done ── -->
+    {% elif step == 7 %}
     <div class="card">
         <h2>You're All Set!</h2>
         <p class="subtitle">Your Hotel Price Tracker is configured and ready to go.</p>
@@ -460,8 +498,17 @@
     </div>
     {% endif %}
 
+    <div class="card" style="background:#f8fafc;">
+        <h3 style="font-size:.9rem; margin-bottom:.5rem;">How to stop the server</h3>
+        <ul style="font-size:.8rem; color:#475569; margin-left:1rem;">
+            <li><strong>Windows:</strong> Right-click the tray icon and choose Exit</li>
+            <li><strong>Linux/macOS:</strong> Run the launcher again with <code>--stop</code></li>
+            <li><strong>Terminal:</strong> Press Ctrl+C in the terminal where the server is running</li>
+        </ul>
+    </div>
+
     <div class="btn-row">
-        <a href="/setup?step=5" class="btn btn-secondary">Back</a>
+        <a href="/setup?step=6" class="btn btn-secondary">Back</a>
         <button type="submit" class="btn btn-success">Go to Dashboard</button>
     </div>
 
