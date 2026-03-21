@@ -136,18 +136,48 @@ def _ensure_deps(base_dir: Path, uv: Path) -> None:
     if venv_dir.exists():
         return
 
-    log.info("First run — installing dependencies (this may take a minute)...")
+    print("=" * 50)
+    print("  First-time setup — installing dependencies...")
+    print("  This may take a minute. Please wait.")
+    print("=" * 50)
+    print()
+
     cmd = [str(uv), "sync", "--no-dev"]
-    result = subprocess.run(
-        cmd,
-        cwd=str(base_dir),
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"uv sync failed:\n{result.stderr}")
-    log.info("Dependencies installed.")
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(base_dir),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.rstrip()
+            if line:
+                # Show download/install progress to the user
+                print(f"  {line}")
+        proc.wait(timeout=300)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        print("\nError: dependency installation timed out after 5 minutes.")
+        print("Check your internet connection and try again.")
+        sys.exit(1)
+    except FileNotFoundError:
+        print(f"\nError: uv not found at {uv}")
+        print("Make sure the tools/ directory contains the uv binary.")
+        sys.exit(1)
+
+    if proc.returncode != 0:
+        print("\nError: dependency installation failed.")
+        print("Check the output above for details.")
+        log_path = _data_dir(base_dir) / "uv-sync-error.log"
+        print(f"If you need help, share: {log_path}")
+        sys.exit(1)
+
+    print()
+    print("  Setup complete!")
+    print()
 
 
 def _ensure_config(base_dir: Path) -> None:

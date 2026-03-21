@@ -1,4 +1,4 @@
-.PHONY: install install-gui lint format typecheck test check build dist dist-all dist-local clean
+.PHONY: install install-gui lint format typecheck test check build dist dist-ci dist-docker clean
 
 # ── Development ────────────────────────────────────────
 
@@ -25,27 +25,34 @@ test:
 
 check: lint format-check typecheck test
 
+# ── Version ───────────────────────────────────────────
+# Format: YYYY.MM.DD[+N.gSHA] where N = commits since last tag
+# Tagged commit:  2026.03.21
+# Dev build:      2026.03.21+5.gabc1234
+# No tags:        0.0.0+abc1234
+
+VERSION := $(shell V=$$(git describe --tags --match 'v*' 2>/dev/null | sed 's/^v//' | sed 's/-/+/' | sed 's/-/./'); if [ -z "$$V" ]; then V="0.0.0+$$(git rev-parse --short HEAD)"; fi; echo "$$V")
+
 # ── Build & Distribution ──────────────────────────────
 
 DIST_NAME := HotelPriceTracker
-DIST_DIR  := dist/$(DIST_NAME)
 PORT      := 8470
 
 # Detect platform
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-    PLATFORM := macos
-    UV_ASSET := uv-aarch64-apple-darwin.tar.gz
+    PLATFORM := macos-arm64
     ICON     := assets/icon.icns
 else ifeq ($(OS),Windows_NT)
-    PLATFORM := windows
-    UV_ASSET := uv-x86_64-pc-windows-msvc.zip
+    PLATFORM := windows-x86_64
     ICON     := assets/icon.ico
 else
-    PLATFORM := linux
-    UV_ASSET := uv-x86_64-unknown-linux-gnu.tar.gz
+    PLATFORM := linux-x86_64
     ICON     := assets/icon.png
 endif
+
+DIST_ZIP  := $(DIST_NAME)-$(VERSION)-$(PLATFORM).zip
+DIST_DIR  := dist/$(DIST_NAME)
 
 build: install-gui
 	uv run pyinstaller \
@@ -58,20 +65,18 @@ build: install-gui
 		src/hotel_agent/launcher.py
 	@echo "Build complete: dist/$(DIST_NAME)/"
 
+# Build distribution for current platform
 dist: build
 	@mkdir -p $(DIST_DIR)/tools $(DIST_DIR)/assets
-	# Copy app source and config
 	cp -r src $(DIST_DIR)/
 	cp pyproject.toml uv.lock $(DIST_DIR)/
 	cp config.example.yaml $(DIST_DIR)/
 	cp .env.example $(DIST_DIR)/
 	cp -r assets $(DIST_DIR)/
-	# Copy the built launcher
 	cp -r dist/$(DIST_NAME)/* $(DIST_DIR)/ 2>/dev/null || true
-	# Create zip
-	cd dist && zip -r $(DIST_NAME)-$(PLATFORM).zip $(DIST_NAME)/
+	cd dist && python3 -m zipfile -c $(DIST_ZIP) $(DIST_NAME)/
 	@echo ""
-	@echo "Distribution ready: dist/$(DIST_NAME)-$(PLATFORM).zip"
+	@echo "Distribution ready: dist/$(DIST_ZIP)"
 	@echo "Note: add the platform-specific uv binary to $(DIST_DIR)/tools/ before shipping."
 
 clean:
@@ -79,11 +84,12 @@ clean:
 
 # ── Multi-platform Distribution ───────────────────────
 
-# Build all platforms via GitHub Actions (requires gh CLI + internet)
+# Build all platforms via GitHub Actions (requires gh CLI + internet).
 # Triggers the release workflow, waits for completion, downloads all zips.
-dist-all:
+dist-ci:
 	@command -v gh >/dev/null 2>&1 || { echo "Error: gh CLI not found. Install: https://cli.github.com"; exit 1; }
 	@echo "Triggering multi-platform build on GitHub Actions..."
+	@echo "Version: $(VERSION)"
 	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	gh workflow run release.yml --ref "$$BRANCH"
 	@echo "Waiting for workflow to start..."
@@ -106,14 +112,14 @@ dist-all:
 	echo "All platform builds downloaded to dist/:";\
 	ls dist/**/*.zip 2>/dev/null || ls dist/*/*.zip 2>/dev/null
 
-# Build Linux variants locally via act + Docker (requires docker/podman)
-# macOS and Windows builds require their native OS — use dist-all for those.
-dist-local:
+# Build Linux variants locally via act + Docker (requires docker/podman).
+# macOS and Windows builds require their native OS — use dist-ci for those.
+dist-docker:
 	@command -v act >/dev/null 2>&1 || command -v $(HOME)/.cache/act-runner/act >/dev/null 2>&1 || \
 		{ echo "Error: act not found. Install: https://github.com/nektos/act"; exit 1; }
 	@ACT=$$(command -v act 2>/dev/null || echo "$(HOME)/.cache/act-runner/act"); \
-	echo "Building Linux distributions locally via act..."; \
-	echo "(macOS/Windows builds require GitHub Actions — use 'make dist-all')"; \
+	echo "Building Linux distributions locally via act + Docker..."; \
+	echo "(macOS/Windows builds require GitHub Actions — use 'make dist-ci')"; \
 	echo ""; \
 	mkdir -p dist; \
 	"$$ACT" -W .github/workflows/release.yml \

@@ -117,26 +117,34 @@ class TestEnsureDeps:
         venv.mkdir()
         uv = tmp_path / "uv"
         # Should not call subprocess at all
-        with patch("hotel_agent.launcher.subprocess.run") as mock_run:
+        with patch("hotel_agent.launcher.subprocess.Popen") as mock_popen:
             _ensure_deps(tmp_path, uv)
-            mock_run.assert_not_called()
+            mock_popen.assert_not_called()
 
     def test_runs_uv_sync_on_first_run(self, tmp_path):
         uv = tmp_path / "uv"
-        with patch("hotel_agent.launcher.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
+        mock_proc = MagicMock()
+        mock_proc.stdout = iter(["Downloading...\n", "Installed 10 packages\n"])
+        mock_proc.wait.return_value = None
+        mock_proc.returncode = 0
+        with patch("hotel_agent.launcher.subprocess.Popen", return_value=mock_proc) as mock_popen:
             _ensure_deps(tmp_path, uv)
-            mock_run.assert_called_once()
-            args = mock_run.call_args
-            assert str(uv) in args[0][0][0]
-            assert "sync" in args[0][0]
+            mock_popen.assert_called_once()
+            cmd = mock_popen.call_args[0][0]
+            assert str(uv) in cmd[0]
+            assert "--no-dev" in cmd
 
-    def test_raises_on_uv_sync_failure(self, tmp_path):
+    def test_exits_on_uv_sync_failure(self, tmp_path):
         uv = tmp_path / "uv"
-        with patch("hotel_agent.launcher.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=1, stderr="error msg")
-            with pytest.raises(RuntimeError, match="uv sync failed"):
-                _ensure_deps(tmp_path, uv)
+        mock_proc = MagicMock()
+        mock_proc.stdout = iter(["error: failed\n"])
+        mock_proc.wait.return_value = None
+        mock_proc.returncode = 1
+        with (
+            patch("hotel_agent.launcher.subprocess.Popen", return_value=mock_proc),
+            pytest.raises(SystemExit),
+        ):
+            _ensure_deps(tmp_path, uv)
 
 
 class TestPidFile:
