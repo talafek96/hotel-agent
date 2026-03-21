@@ -14,9 +14,15 @@ document.addEventListener('DOMContentLoaded', function() {
         popoverOffset: 12,
         onDestroyed: function() { localStorage.setItem('tour_config_done', '1'); },
         steps: [
-            { popover: { title: 'Configuration', description: 'All your settings live here — travelers, AI model, currency, alert thresholds, notifications, and API keys.' }},
-            { element: '#travelers_adults', popover: { title: 'Default Travelers', description: 'Set the default number of adults and children for price searches. Can be overridden per booking.', side: 'bottom' }},
-            { element: '.info-tooltip-trigger', popover: { title: 'API Key Help', description: 'Hover or click the (i) icon next to any API key for step-by-step instructions on how to get it.', side: 'bottom' }},
+            { popover: { title: 'Configuration', description: 'All your settings live here — travelers, AI model, currency, alert thresholds, notifications, and API keys. Changes are saved to config.yaml when you click Save.' }},
+            { element: '#travelers_adults', popover: { title: 'Default Travelers', description: 'Set the default number of adults and children for price searches. These are used when fetching hotel prices from Google Hotels. You can override them per booking.', side: 'bottom' }},
+            { element: '#llm_provider', popover: { title: 'AI Provider', description: 'Choose which AI service parses your Excel files and analyzes prices. OpenAI (GPT), Anthropic (Claude), or Google (Gemini). Pick whichever you have an API key for.', side: 'bottom' }},
+            { element: '#llm_model', popover: { title: 'AI Model', description: 'Click "Load models" to see available models from your provider. Cheaper models (e.g. gpt-4o-mini) work fine for most tasks.', side: 'bottom' }},
+            { element: '#currency_base', popover: { title: 'Base Currency', description: 'Your home currency. All price comparisons and alerts will be shown in this currency. Set exchange rates below if your bookings are in other currencies.', side: 'bottom' }},
+            { element: '#alert_pd_abs', popover: { title: 'Alert Thresholds', description: 'Control when you get notified. "Min Absolute Drop" is the minimum savings (e.g. $50). "Min Percentage" is the minimum discount (e.g. 5%). Both must be met to trigger an alert.', side: 'left' }},
+            { element: '#alert_up_cost', popover: { title: 'Room Upgrade Alerts', description: 'Get alerted when a better room is available for little extra cost. "Max Extra Cost" is the most you\'d pay more (e.g. $30). "Max Extra %" caps the increase (e.g. 10%).', side: 'left' }},
+            { element: 'input[name="notif_telegram"]', popover: { title: 'Notifications', description: 'Enable Telegram and/or email alerts. You\'ll need to set up the corresponding API keys below. Use "Send Test" buttons to verify your setup works.', side: 'left' }},
+            { element: '.info-tooltip-trigger', popover: { title: 'API Key Help', description: 'Hover or click the (i) icon next to any API key for step-by-step instructions on where to get it. Keys marked "NOT SET" still need to be configured.', side: 'bottom' }},
         ]
     });
     driverObj.drive();

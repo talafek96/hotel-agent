@@ -602,3 +602,23 @@ class TestPlatformUrl:
 
         assert platform_url("rakuten_travel") == "https://travel.rakuten.co.jp"
         assert platform_url("jalan") == "https://www.jalan.net"
+
+
+class TestImportErrorHeader:
+    """Test that import failure returns X-Import-Error header."""
+
+    def test_import_bad_file_returns_error_header(self, seeded_env):
+        """POST /import with an invalid file should return X-Import-Error."""
+        client, *_ = seeded_env
+        import io
+
+        fake_file = io.BytesIO(b"not a real excel file")
+        resp = client.post(
+            "/import",
+            files={"file": ("bad.xlsx", fake_file, "application/octet-stream")},
+            data={"sheet": "Sheet1", "table": ""},
+        )
+        assert resp.headers.get("X-Import-Status") == "error"
+        err = resp.headers.get("X-Import-Error")
+        assert err is not None
+        assert len(err) > 0

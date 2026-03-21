@@ -675,7 +675,8 @@ function validateAndImport() {
     fetch('/setup', {method: 'POST', body: formData})
         .then(function(resp) {
             var status = resp.headers.get('X-Import-Status');
-            return {status: status, ok: resp.ok};
+            var errMsg = resp.headers.get('X-Import-Error');
+            return {status: status, error: errMsg, ok: resp.ok};
         })
         .then(function(result) {
             var spinner = document.getElementById('import-spinner');
@@ -687,12 +688,12 @@ function validateAndImport() {
                 spinner.classList.add('error');
                 title.textContent = 'Import failed';
                 msg.style.display = 'none';
-                resultMsg.textContent = 'Check the error details on the next page.';
+                resultMsg.textContent = result.error || 'An unknown error occurred.';
                 resultMsg.style.display = 'block';
                 resultMsg.style.color = '#991b1b';
                 setTimeout(function() {
-                    window.location.href = '/setup?step=6';
-                }, 3000);
+                    overlay.classList.remove('active');
+                }, 5000);
             } else {
                 spinner.classList.add('success');
                 title.textContent = 'Import successful!';

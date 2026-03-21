@@ -114,7 +114,8 @@ function showImportProgress() {
     fetch('/import', {method: 'POST', body: formData})
         .then(function(resp) {
             var status = resp.headers.get('X-Import-Status');
-            return {status: status};
+            var errMsg = resp.headers.get('X-Import-Error');
+            return {status: status, error: errMsg};
         })
         .then(function(data) {
             var spinner = document.getElementById('import-spinner');
@@ -126,9 +127,10 @@ function showImportProgress() {
                 spinner.className = 'import-spinner error';
                 title.textContent = 'Import failed';
                 msg.style.display = 'none';
-                result.textContent = 'Check the error details on the page.';
+                result.textContent = data.error || 'An unknown error occurred.';
                 result.style.display = 'block';
                 result.style.color = '#991b1b';
+                setTimeout(function() { overlay.classList.remove('active'); }, 5000);
             } else {
                 spinner.className = 'import-spinner success';
                 title.textContent = 'Import successful!';
@@ -136,10 +138,10 @@ function showImportProgress() {
                 result.textContent = 'Bookings imported successfully.';
                 result.style.display = 'block';
                 result.style.color = '#166534';
+                setTimeout(function() {
+                    window.location.reload();
+                }, 3000);
             }
-            setTimeout(function() {
-                window.location.reload();
-            }, 3000);
         })
         .catch(function(err) {
             var spinner = document.getElementById('import-spinner');
