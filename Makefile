@@ -1,29 +1,34 @@
-.PHONY: install install-gui lint format typecheck test check build dist dist-ci dist-docker clean
+.PHONY: help install install-gui lint format typecheck test check build dist dist-ci dist-docker clean
+
+.DEFAULT_GOAL := help
+
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 # ── Development ────────────────────────────────────────
 
-install:
+install: ## Install dev dependencies
 	uv sync --group dev
 
-install-gui:
+install-gui: ## Install dev + GUI dependencies (pystray, Pillow)
 	uv sync --group dev --extra gui
 
-lint:
+lint: ## Run linter (ruff check)
 	uv run ruff check src/ tests/
 
-format:
+format: ## Auto-format code (ruff format)
 	uv run ruff format src/ tests/
 
-format-check:
+format-check: ## Check formatting without changes
 	uv run ruff format --check src/ tests/
 
-typecheck:
+typecheck: ## Run type checker (mypy)
 	uv run mypy src/hotel_agent/
 
-test:
+test: ## Run test suite (pytest)
 	uv run pytest
 
-check: lint format-check typecheck test
+check: lint format-check typecheck test ## Run all quality checks
 
 # ── Version ───────────────────────────────────────────
 # Format: YYYY.MM.DD[+N.gSHA] where N = commits since last tag
@@ -54,7 +59,7 @@ endif
 DIST_ZIP  := $(DIST_NAME)-$(VERSION)-$(PLATFORM).zip
 DIST_DIR  := dist/$(DIST_NAME)
 
-build: install-gui
+build: install-gui ## Build PyInstaller launcher for current platform
 	uv run pyinstaller \
 		--name $(DIST_NAME) \
 		--windowed \
@@ -65,8 +70,7 @@ build: install-gui
 		src/hotel_agent/launcher.py
 	@echo "Build complete: dist/$(DIST_NAME)/"
 
-# Build distribution for current platform
-dist: build
+dist: build ## Package distribution zip for current platform
 	@mkdir -p $(DIST_DIR)/tools $(DIST_DIR)/assets
 	cp -r src $(DIST_DIR)/
 	cp pyproject.toml uv.lock $(DIST_DIR)/
@@ -79,14 +83,12 @@ dist: build
 	@echo "Distribution ready: dist/$(DIST_ZIP)"
 	@echo "Note: add the platform-specific uv binary to $(DIST_DIR)/tools/ before shipping."
 
-clean:
+clean: ## Remove build artifacts
 	rm -rf build/ dist/ *.spec __pycache__
 
 # ── Multi-platform Distribution ───────────────────────
 
-# Build all platforms via GitHub Actions (requires gh CLI + internet).
-# Triggers the release workflow, waits for completion, downloads all zips.
-dist-ci:
+dist-ci: ## Build all platforms via GitHub Actions (requires gh CLI)
 	@command -v gh >/dev/null 2>&1 || { echo "Error: gh CLI not found. Install: https://cli.github.com"; exit 1; }
 	@echo "Triggering multi-platform build on GitHub Actions..."
 	@echo "Version: $(VERSION)"
@@ -112,9 +114,7 @@ dist-ci:
 	echo "All platform builds downloaded to dist/:";\
 	ls dist/**/*.zip 2>/dev/null || ls dist/*/*.zip 2>/dev/null
 
-# Build Linux variants locally via act + Docker (requires docker/podman).
-# macOS and Windows builds require their native OS — use dist-ci for those.
-dist-docker:
+dist-docker: ## Build Linux via act + Docker locally (requires docker)
 	@command -v act >/dev/null 2>&1 || command -v $(HOME)/.cache/act-runner/act >/dev/null 2>&1 || \
 		{ echo "Error: act not found. Install: https://github.com/nektos/act"; exit 1; }
 	@ACT=$$(command -v act 2>/dev/null || echo "$(HOME)/.cache/act-runner/act"); \
