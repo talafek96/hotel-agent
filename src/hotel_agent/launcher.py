@@ -30,7 +30,7 @@ _STARTUP_TIMEOUT = 120  # seconds to wait for server ready
 def _open_browser(url: str) -> None:
     """Open URL in the default browser, handling WSL and headless environments."""
     # WSL: try Windows browser via cmd.exe
-    if "microsoft" in os.uname().release.lower():
+    if sys.platform != "win32" and "microsoft" in (os.uname().release or "").lower():
         try:
             subprocess.Popen(
                 ["cmd.exe", "/c", "start", url],
