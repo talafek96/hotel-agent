@@ -108,28 +108,28 @@ function showImportProgress() {
     var form = document.querySelector('form');
     var formData = new FormData(form);
     fetch('/import', {method: 'POST', body: formData})
-        .then(function(resp) { return resp.text(); })
-        .then(function(html) {
+        .then(function(resp) {
+            var status = resp.headers.get('X-Import-Status');
+            return {status: status};
+        })
+        .then(function(data) {
             var spinner = document.getElementById('import-spinner');
             var title = document.getElementById('import-title');
             var msg = document.getElementById('import-msg');
             var result = document.getElementById('import-result');
 
-            var isError = html.indexOf('alert-error') >= 0;
-            if (isError) {
+            if (data.status === 'error') {
                 spinner.className = 'import-spinner error';
                 title.textContent = 'Import failed';
                 msg.style.display = 'none';
-                var idx = html.indexOf('Import failed: '); var match = null; if (idx >= 0) { var sub = html.substring(idx + 15); var end = sub.indexOf('<'); match = [null, end > 0 ? sub.substring(0, end) : sub.substring(0, 100)]; }
-                result.textContent = match ? match[1] : 'Check the error and try again.';
+                result.textContent = 'Check the error details on the page.';
                 result.style.display = 'block';
                 result.style.color = '#991b1b';
             } else {
                 spinner.className = 'import-spinner success';
                 title.textContent = 'Import successful!';
                 msg.style.display = 'none';
-                var cIdx = html.indexOf('Imported '); var countMatch = null; if (cIdx >= 0) { var cSub = html.substring(cIdx); var cEnd = cSub.indexOf('.'); countMatch = [null, cEnd > 0 ? cSub.substring(0, cEnd) : 'Bookings imported']; }
-                result.textContent = countMatch ? countMatch[0] + 's.' : 'Bookings imported.';
+                result.textContent = 'Bookings imported successfully.';
                 result.style.display = 'block';
                 result.style.color = '#166534';
             }

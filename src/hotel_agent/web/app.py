@@ -333,7 +333,14 @@ def create_app(config_path: str | None = None) -> FastAPI:
             "import_result": import_result,
             "configured": _configured_summary() if next_step == 7 else {},
         }
-        return templates.TemplateResponse(request, "setup.html", ctx)
+        resp = templates.TemplateResponse(request, "setup.html", ctx)
+        # Signal import result to fetch-based JS (can't parse HTML reliably)
+        if step == 6:
+            if error or (import_result and not import_result.get("success")):
+                resp.headers["X-Import-Status"] = "error"
+            else:
+                resp.headers["X-Import-Status"] = "success"
+        return resp
 
     # ── Dashboard ──────────────────────────────────
     @app.get("/", response_class=HTMLResponse)
@@ -783,13 +790,15 @@ def create_app(config_path: str | None = None) -> FastAPI:
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
-        return templates.TemplateResponse(
+        resp = templates.TemplateResponse(
             request,
             "import.html",
             {
                 "result": result,
             },
         )
+        resp.headers["X-Import-Status"] = "success" if result.get("success") else "error"
+        return resp
 
     # ── Scrape Runs History ─────────────────────────
     @app.get("/scrapes", response_class=HTMLResponse)

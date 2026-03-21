@@ -673,24 +673,23 @@ function validateAndImport() {
     var form = document.getElementById('setup-form');
     var formData = new FormData(form);
     fetch('/setup', {method: 'POST', body: formData})
-        .then(function(resp) { return resp.text().then(function(html) { return {html: html, ok: resp.ok}; }); })
+        .then(function(resp) {
+            var status = resp.headers.get('X-Import-Status');
+            return {status: status, ok: resp.ok};
+        })
         .then(function(result) {
             var spinner = document.getElementById('import-spinner');
             var title = document.getElementById('import-spinner-title');
             var msg = document.getElementById('import-spinner-msg');
             var resultMsg = document.getElementById('import-result-msg');
 
-            var isError = result.html.indexOf('alert-error') >= 0;
-            if (isError) {
+            if (result.status === 'error') {
                 spinner.classList.add('error');
                 title.textContent = 'Import failed';
                 msg.style.display = 'none';
-                // Extract error message
-                var idx = result.html.indexOf('Import failed: '); var match = null; if (idx >= 0) { var sub = result.html.substring(idx + 15); var end = sub.indexOf('<'); match = [null, end > 0 ? sub.substring(0, end) : sub.substring(0, 100)]; }
-                resultMsg.textContent = match ? match[1] : 'Check the error and try again.';
+                resultMsg.textContent = 'Check the error details on the next page.';
                 resultMsg.style.display = 'block';
                 resultMsg.style.color = '#991b1b';
-                // Stay on overlay for 3s then reload to show the error
                 setTimeout(function() {
                     window.location.href = '/setup?step=6';
                 }, 3000);
@@ -701,7 +700,6 @@ function validateAndImport() {
                 resultMsg.textContent = 'Bookings imported successfully.';
                 resultMsg.style.display = 'block';
                 resultMsg.style.color = '#166534';
-                // Show success for 3s then navigate to Done step
                 setTimeout(function() {
                     window.location.href = '/setup?step=7';
                 }, 3000);
