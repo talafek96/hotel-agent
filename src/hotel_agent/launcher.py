@@ -107,6 +107,7 @@ def _start_server(base_dir: Path, uv: Path) -> subprocess.Popen:  # type: ignore
     cmd = [
         str(uv),
         "run",
+        "--no-dev",
         "hotel-agent",
         "serve",
         "--port",
@@ -433,9 +434,23 @@ def _run_headless(server_proc: subprocess.Popen) -> None:  # type: ignore[type-a
 
 def main() -> None:
     """Main entry point for the GUI launcher."""
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-
     base_dir = _resolve_base_dir()
+    log_dir = _data_dir(base_dir)
+
+    # Log to both console and file (file is critical for --windowed .exe)
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    try:
+        file_handler = logging.FileHandler(log_dir / "launcher.log", encoding="utf-8")
+        handlers.append(file_handler)
+    except OSError:
+        pass
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(message)s",
+        datefmt="%H:%M:%S",
+        handlers=handlers,
+    )
+    log.info("Launcher starting — base_dir=%s", base_dir)
 
     # Handle --stop flag (Linux)
     if "--stop" in sys.argv:
@@ -451,12 +466,14 @@ def main() -> None:
 
     # Resolve uv and ensure deps are installed
     uv = _resolve_uv_path(base_dir)
+    log.info("uv found at %s", uv)
     _ensure_config(base_dir)
     _ensure_deps(base_dir, uv)
 
     # Start the server
-    log.info("Starting server...")
+    log.info("Starting server subprocess...")
     server_proc = _start_server(base_dir, uv)
+    log.info("Server subprocess started (PID %s), waiting for ready...", server_proc.pid)
 
     # Wait for server to be ready
     if not _wait_for_server():
