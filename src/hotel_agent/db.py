@@ -284,32 +284,19 @@ class Database:
     # ── Bookings ────────────────────────────────────────────
 
     def upsert_booking(self, booking: Booking) -> int:
-        """Insert or update a booking. Deduplicates by booking_reference
-        or by (hotel_id, check_in, check_out, platform). Returns booking ID."""
+        """Insert or update a booking. Deduplicates by booking_reference only.
+
+        If a booking_reference is provided and matches an existing booking,
+        the existing record is updated. Otherwise a new booking is created.
+        This avoids merging separate room bookings at the same hotel/dates.
+        """
         existing_id = None
 
-        # 1. Match by booking_reference if available
+        # Match by booking_reference (the only reliable dedup key)
         if booking.booking_reference:
             row = self.conn.execute(
                 "SELECT id FROM bookings WHERE booking_reference=? AND booking_reference != ''",
                 (booking.booking_reference,),
-            ).fetchone()
-            if row:
-                existing_id = row["id"]
-
-        # 2. Match by (hotel_id, check_in, check_out, platform, room_type)
-        #    Includes room_type so multiple rooms at the same hotel/dates aren't merged
-        if not existing_id:
-            row = self.conn.execute(
-                """SELECT id FROM bookings
-                   WHERE hotel_id=? AND check_in=? AND check_out=? AND platform=? AND room_type=?""",
-                (
-                    booking.hotel_id,
-                    date_to_str(booking.check_in),
-                    date_to_str(booking.check_out),
-                    booking.platform,
-                    booking.room_type,
-                ),
             ).fetchone()
             if row:
                 existing_id = row["id"]
