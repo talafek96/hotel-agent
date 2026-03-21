@@ -94,10 +94,6 @@
         .skip-link { font-size: .8rem; color: #94a3b8; }
         .skip-link:hover { color: #64748b; }
 
-        .validation-error { color: #dc2626; font-size: .8rem; margin-top: .25rem; display: none; }
-        input.invalid { border-color: #ef4444; }
-        input.invalid:focus { box-shadow: 0 0 0 3px rgba(239,68,68,.15); }
-
         .checklist { list-style: none; }
         .checklist li { padding: .5rem 0; font-size: .9rem; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: .5rem; }
         .checklist li:last-child { border-bottom: none; }
@@ -130,9 +126,8 @@
     <div class="alert-box alert-error">{{ error }}</div>
     {% endif %}
 
-    <form method="post" {% if step == 5 %}enctype="multipart/form-data"{% endif %} id="setup-form">
+    <form method="post" {% if step == 5 %}enctype="multipart/form-data"{% endif %}>
     <input type="hidden" name="step" value="{{ step }}">
-    <input type="hidden" name="skip" id="skip-field" value="">
 
     <!-- ── Step 1: Welcome ── -->
     {% if step == 1 %}
@@ -235,10 +230,7 @@
 
     <div class="btn-row">
         <a href="/setup?step=1" class="btn btn-secondary">Back</a>
-        <div style="display:flex; gap:.75rem; align-items:center;">
-            <a href="#" class="skip-link" onclick="skipStep(); return false;">Skip for now</a>
-            <button type="submit" class="btn btn-primary" onclick="return validateStep2()">Next</button>
-        </div>
+        <button type="submit" class="btn btn-primary">Next</button>
     </div>
 
     <!-- ── Step 3: SerpAPI Key ── -->
@@ -266,10 +258,7 @@
 
     <div class="btn-row">
         <a href="/setup?step=2" class="btn btn-secondary">Back</a>
-        <div style="display:flex; gap:.75rem; align-items:center;">
-            <a href="#" class="skip-link" onclick="skipStep(); return false;">Skip for now</a>
-            <button type="submit" class="btn btn-primary" onclick="return validateStep3()">Next</button>
-        </div>
+        <button type="submit" class="btn btn-primary">Next</button>
     </div>
 
     <!-- ── Step 4: Notifications ── -->
@@ -400,26 +389,14 @@
         </ul>
     </div>
 
-    {% set skipped_items = [] %}
-    {% if not configured.llm %}{% set _ = skipped_items.append("AI Provider — go to the <a href='/config'>Config</a> page to add your LLM API key") %}{% endif %}
-    {% if not configured.serpapi %}{% set _ = skipped_items.append("SerpAPI — go to the <a href='/config'>Config</a> page to add your SerpAPI key") %}{% endif %}
-    {% if not configured.imported %}{% set _ = skipped_items.append("Bookings — go to the <a href='/import'>Import</a> page to upload your Excel file") %}{% endif %}
-
-    {% if skipped_items %}
-    <div class="warning-box">
-        <strong>Some steps were skipped.</strong> You can complete them anytime:
-        <ul style="margin-top:.5rem; margin-left:1.25rem; font-size:.85rem;">
-            {% for item in skipped_items %}
-            <li style="margin-bottom:.25rem;">{{ item | safe }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-
     {% if configured.imported %}
     <div class="info-box">
         <strong>Next step:</strong> Head to the <a href="/bookings">Bookings</a> tab to review your imported data.
         Check that dates, prices, and hotel names look correct. The AI does its best, but some fields may need manual corrections.
+    </div>
+    {% else %}
+    <div class="info-box">
+        <strong>Next step:</strong> Go to the <a href="/import">Import</a> page to upload your hotel bookings Excel file.
     </div>
     {% endif %}
 
@@ -443,55 +420,6 @@ function selectProvider(el, provider) {
     });
     var fields = document.getElementById(provider + '-fields');
     if (fields) fields.style.display = 'block';
-}
-
-function skipStep() {
-    document.getElementById('skip-field').value = '1';
-    document.getElementById('setup-form').submit();
-}
-
-function showValidationError(inputId, message) {
-    var input = document.getElementById(inputId);
-    if (!input) return;
-    input.classList.add('invalid');
-    var err = input.parentElement.querySelector('.validation-error');
-    if (!err) {
-        err = document.createElement('p');
-        err.className = 'validation-error';
-        input.parentElement.appendChild(err);
-    }
-    err.textContent = message;
-    err.style.display = 'block';
-    input.focus();
-}
-
-function clearValidation() {
-    document.querySelectorAll('.invalid').forEach(function(el) { el.classList.remove('invalid'); });
-    document.querySelectorAll('.validation-error').forEach(function(el) { el.style.display = 'none'; });
-}
-
-function validateStep2() {
-    clearValidation();
-    var provider = document.querySelector('input[name="llm_provider"]:checked');
-    if (!provider) return true;
-    var p = provider.value;
-    var keyField = {openai: 'openai_key', gemini: 'gemini_key', anthropic: 'anthropic_key'}[p];
-    var input = document.getElementById(keyField);
-    if (input && !input.value.trim()) {
-        showValidationError(keyField, 'Please enter your API key, or click "Skip for now" to configure later.');
-        return false;
-    }
-    return true;
-}
-
-function validateStep3() {
-    clearValidation();
-    var input = document.getElementById('serpapi_key');
-    if (input && !input.value.trim()) {
-        showValidationError('serpapi_key', 'Please enter your SerpAPI key, or click "Skip for now" to configure later.');
-        return false;
-    }
-    return true;
 }
 </script>
 

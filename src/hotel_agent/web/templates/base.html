@@ -114,34 +114,6 @@
         input:focus, select:focus, textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
         textarea { resize: vertical; min-height: 5rem; }
 
-        /* ── Info tooltips ── */
-        .info-tooltip-trigger {
-            position: relative; display: inline-flex; cursor: help;
-        }
-        .info-icon {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 1rem; height: 1rem; border-radius: 50%; background: #94a3b8; color: #fff;
-            font-size: .6rem; font-weight: 700; font-style: italic; font-family: Georgia, serif;
-            line-height: 1; flex-shrink: 0;
-        }
-        .info-tooltip-bubble {
-            display: none; position: absolute; bottom: calc(100% + .5rem); left: 50%;
-            transform: translateX(-50%); width: 280px; padding: .75rem; border-radius: .375rem;
-            background: #1e293b; color: #e2e8f0; font-size: .75rem; font-weight: 400;
-            font-style: normal; line-height: 1.5; box-shadow: 0 4px 12px rgba(0,0,0,.2);
-            z-index: 200; pointer-events: none;
-        }
-        .info-tooltip-bubble::after {
-            content: ''; position: absolute; top: 100%; left: 50%;
-            transform: translateX(-50%); border: 6px solid transparent;
-            border-top-color: #1e293b;
-        }
-        .info-tooltip-bubble a { color: #93c5fd; }
-        .info-tooltip-trigger:hover .info-tooltip-bubble,
-        .info-tooltip-trigger:focus .info-tooltip-bubble {
-            display: block; pointer-events: auto;
-        }
-
         /* ── Responsive ── */
         @media (max-width: 1024px) {
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
