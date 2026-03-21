@@ -495,11 +495,23 @@ def is_autostart_enabled() -> bool:
 def _autostart_command(base_dir: Path) -> str:
     """Build the command string for OS startup registration.
 
-    Frozen exe: just the exe path.
-    Dev/uv mode: find uv on PATH + --directory + run command.
+    Priority:
+    1. Frozen exe (PyInstaller) → sys.executable
+    2. Packaged launcher exe in base_dir → HotelPriceTracker(.exe)
+    3. Dev mode → uv from PATH + --directory
     """
+    # 1. Running as frozen exe
     if getattr(sys, "frozen", False):
         return str(Path(sys.executable).resolve())
+
+    # 2. Packaged distribution: web server is spawned by the launcher exe
+    #    which sits next to tools/uv, src/, etc.
+    ext = ".exe" if sys.platform == "win32" else ""
+    launcher_exe = base_dir / f"HotelPriceTracker{ext}"
+    if launcher_exe.exists():
+        return str(launcher_exe.resolve())
+
+    # 3. Dev mode: uv on system PATH
     import shutil
 
     uv = shutil.which("uv")

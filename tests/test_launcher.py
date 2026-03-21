@@ -238,10 +238,18 @@ class TestAutostart:
             assert is_autostart_enabled() is False
 
     def test_autostart_command_includes_uv_and_directory(self):
-        """Non-frozen command should have full uv path and --directory."""
+        """Dev mode: command should have full uv path and --directory."""
         base = _resolve_base_dir()
         cmd = _autostart_command(base)
         assert "uv" in cmd
         assert "--no-dev" in cmd
         assert "--directory" in cmd
         assert "hotel-agent-gui" in cmd
+
+    def test_autostart_command_uses_launcher_exe(self, tmp_path):
+        """Packaged distribution: command should be the launcher exe."""
+        launcher = tmp_path / "HotelPriceTracker"
+        launcher.write_text("#!/bin/sh\n")
+        cmd = _autostart_command(tmp_path)
+        assert cmd == str(launcher.resolve())
+        assert "--directory" not in cmd
