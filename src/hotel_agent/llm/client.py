@@ -49,7 +49,7 @@ def call_llm(
     system_prompt: str = "",
     model_override: str | None = None,
     temperature: float = 0.1,
-    max_tokens: int = 4096,
+    max_tokens: int = 16384,
     response_format: dict | None = None,
 ) -> str:
     """Call the LLM and return the text response."""
@@ -76,7 +76,13 @@ def call_llm(
 
     response = litellm.completion(**kwargs)
     content = response.choices[0].message.content
-    log.info(f"LLM response: {len(content)} chars")
+    finish_reason = response.choices[0].finish_reason
+
+    log.info(f"LLM response: {len(content)} chars, finish_reason={finish_reason}")
+
+    if finish_reason == "length":
+        log.warning("LLM response was truncated (hit max_tokens limit)")
+
     return str(content)
 
 
@@ -88,15 +94,41 @@ def call_llm_json(
     temperature: float = 0.0,
 ) -> Any:
     """Call the LLM and parse the response as JSON."""
-    response = call_llm(
-        config=config,
-        prompt=prompt,
-        system_prompt=system_prompt,
-        model_override=model_override,
-        temperature=temperature,
-        response_format={"type": "json_object"},
-    )
+    try:
+        response = call_llm(
+            config=config,
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model_override=model_override,
+            temperature=temperature,
+            response_format={"type": "json_object"},
+        )
+    except Exception:
+        # Some providers don't support response_format — retry without it
+        log.warning("JSON mode failed, retrying without response_format")
+        response = call_llm(
+            config=config,
+            prompt=prompt,
+            system_prompt=system_prompt + "\n\nYou MUST respond with valid JSON only.",
+            model_override=model_override,
+            temperature=temperature,
+        )
 
     text = strip_code_fences(response)
 
-    return json.loads(text)
+    if not text.strip():
+        raise ValueError(
+            "The AI returned an empty response. This can happen if the Excel data "
+            "is too large or the API key is invalid. Try a smaller sheet or check "
+            "your API key in the Config page."
+        )
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        log.error("LLM returned invalid JSON: %s...", text[:200])
+        raise ValueError(
+            f"The AI response was not valid JSON. This sometimes happens with "
+            f"large Excel files. Try selecting a specific table name, or use a "
+            f"smaller sheet. (Error: {e})"
+        ) from e

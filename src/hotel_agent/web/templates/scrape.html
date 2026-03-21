@@ -2,6 +2,28 @@
 {% from "_macros.html" import platform_badge %}
 {% block title %}Scrape{% endblock %}
 {% block topbar_title %}Fetch Prices{% endblock %}
+{% block tutorial %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('tour_scrape_done')) return;
+    var driverObj = window.driver.js.driver({
+        showProgress: true,
+        animate: true,
+        overlayColor: "rgba(0,0,0,0.6)",
+        stagePadding: 8,
+        stageRadius: 8,
+        popoverOffset: 12,
+        onDestroyed: function() { localStorage.setItem('tour_scrape_done', '1'); },
+        steps: [
+            { popover: { title: 'Fetch Hotel Prices', description: 'This page queries Google Hotels via SerpAPI to get current prices from Booking.com, Agoda, Expedia, and more — all in a single query per hotel.' }},
+            { element: '.btn-primary', popover: { title: 'Start Scraping', description: 'Click to fetch prices for all your tracked bookings. Progress is shown in real-time.', side: 'left' }},
+            { element: '.sidebar-nav a[href="/check"]', popover: { title: 'Next: Check Prices', description: 'After fetching, go to Price Check to compare against your booked prices and find deals.', side: 'right' }},
+        ]
+    });
+    driverObj.drive();
+});
+</script>
+{% endblock %}
 {% block content %}
 <h1>Fetch Hotel Prices (SerpAPI)</h1>
 

@@ -39,8 +39,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed for git describe
 
       - uses: astral-sh/setup-uv@v5
+
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          # If triggered by a tag, use the tag directly
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+          else
+            # Dev build: find nearest tag + commit distance
+            VER=$(git describe --tags --match 'v*' --long 2>/dev/null | sed 's/^v//; s/-\([0-9]*\)-g/+\1.g/' || true)
+            if [ -z "$VER" ]; then VER="0.0.0+$(git rev-parse --short HEAD)"; fi
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Version: $VER"
 
       - name: Install dependencies
         run: uv sync --group dev --extra gui
@@ -80,18 +97,20 @@ jobs:
 
       - name: Create archive
         shell: bash
+        env:
+          ZIP_NAME: HotelPriceTracker-${{ steps.version.outputs.version }}-${{ matrix.platform }}.zip
         run: |
           cd dist
           if command -v zip &> /dev/null; then
-            zip -r HotelPriceTracker-${{ matrix.platform }}.zip HotelPriceTracker/
+            zip -r "$ZIP_NAME" HotelPriceTracker/
           else
-            7z a HotelPriceTracker-${{ matrix.platform }}.zip HotelPriceTracker/
+            7z a "$ZIP_NAME" HotelPriceTracker/
           fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: HotelPriceTracker-${{ matrix.platform }}
-          path: dist/HotelPriceTracker-${{ matrix.platform }}.zip
+          path: dist/HotelPriceTracker-*.zip
 
   release:
     needs: build

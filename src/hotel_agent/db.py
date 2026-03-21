@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     is_cancellable INTEGER NOT NULL DEFAULT 0,
     cancellation_deadline TEXT,
     breakfast_included INTEGER NOT NULL DEFAULT 0,
+    dinner_included INTEGER NOT NULL DEFAULT 0,
     bathroom_type TEXT DEFAULT 'private',
     platform TEXT DEFAULT '',
     booking_reference TEXT DEFAULT '',
@@ -283,30 +284,19 @@ class Database:
     # ── Bookings ────────────────────────────────────────────
 
     def upsert_booking(self, booking: Booking) -> int:
-        """Insert or update a booking. Deduplicates by booking_reference
-        or by (hotel_id, check_in, check_out, platform). Returns booking ID."""
+        """Insert or update a booking. Deduplicates by booking_reference only.
+
+        If a booking_reference is provided and matches an existing booking,
+        the existing record is updated. Otherwise a new booking is created.
+        This avoids merging separate room bookings at the same hotel/dates.
+        """
         existing_id = None
 
-        # 1. Match by booking_reference if available
+        # Match by booking_reference (the only reliable dedup key)
         if booking.booking_reference:
             row = self.conn.execute(
                 "SELECT id FROM bookings WHERE booking_reference=? AND booking_reference != ''",
                 (booking.booking_reference,),
-            ).fetchone()
-            if row:
-                existing_id = row["id"]
-
-        # 2. Match by (hotel_id, check_in, check_out, platform)
-        if not existing_id:
-            row = self.conn.execute(
-                """SELECT id FROM bookings
-                   WHERE hotel_id=? AND check_in=? AND check_out=? AND platform=?""",
-                (
-                    booking.hotel_id,
-                    date_to_str(booking.check_in),
-                    date_to_str(booking.check_out),
-                    booking.platform,
-                ),
             ).fetchone()
             if row:
                 existing_id = row["id"]
@@ -323,6 +313,7 @@ class Database:
             int(booking.is_cancellable),
             date_to_str(booking.cancellation_deadline),
             int(booking.breakfast_included),
+            int(booking.dinner_included),
             booking.bathroom_type,
             booking.platform,
             booking.booking_reference,
@@ -337,7 +328,7 @@ class Database:
                 """UPDATE bookings SET
                    hotel_id=?, check_in=?, check_out=?, adults=?, children_ages=?,
                    room_type=?, booked_price=?, currency=?, is_cancellable=?,
-                   cancellation_deadline=?, breakfast_included=?, bathroom_type=?,
+                   cancellation_deadline=?, breakfast_included=?, dinner_included=?, bathroom_type=?,
                    platform=?, booking_reference=?, booking_url=?, extras=?, status=?, notes=?
                    WHERE id=?""",
                 (*params, existing_id),
@@ -349,9 +340,9 @@ class Database:
             """INSERT INTO bookings
                (hotel_id, check_in, check_out, adults, children_ages,
                 room_type, booked_price, currency, is_cancellable,
-                cancellation_deadline, breakfast_included, bathroom_type,
+                cancellation_deadline, breakfast_included, dinner_included, bathroom_type,
                 platform, booking_reference, booking_url, extras, status, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             params,
         )
         self.conn.commit()
@@ -386,6 +377,7 @@ class Database:
             is_cancellable=bool(r["is_cancellable"]),
             cancellation_deadline=parse_date(r["cancellation_deadline"]),
             breakfast_included=bool(r["breakfast_included"]),
+            dinner_included=bool(r["dinner_included"]) if "dinner_included" in r else False,
             bathroom_type=r["bathroom_type"],
             platform=r["platform"],
             booking_reference=r["booking_reference"],
@@ -409,7 +401,7 @@ class Database:
             """UPDATE bookings SET
                hotel_id=?, check_in=?, check_out=?, adults=?, children_ages=?,
                room_type=?, booked_price=?, currency=?, is_cancellable=?,
-               cancellation_deadline=?, breakfast_included=?, bathroom_type=?,
+               cancellation_deadline=?, breakfast_included=?, dinner_included=?, bathroom_type=?,
                platform=?, booking_reference=?, booking_url=?, extras=?, status=?, notes=?
                WHERE id=?""",
             (
@@ -424,6 +416,7 @@ class Database:
                 int(booking.is_cancellable),
                 date_to_str(booking.cancellation_deadline),
                 int(booking.breakfast_included),
+                int(booking.dinner_included),
                 booking.bathroom_type,
                 booking.platform,
                 booking.booking_reference,

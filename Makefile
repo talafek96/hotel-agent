@@ -1,53 +1,67 @@
-.PHONY: install install-gui lint format typecheck test check build dist clean
+.PHONY: help install install-gui lint format typecheck test check build dist release dist-ci dist-docker clean
+
+.DEFAULT_GOAL := help
+
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 # ── Development ────────────────────────────────────────
 
-install:
+install: ## Install dev dependencies
 	uv sync --group dev
 
-install-gui:
+install-gui: ## Install dev + GUI dependencies (pystray, Pillow)
 	uv sync --group dev --extra gui
 
-lint:
+lint: ## Run linter (ruff check)
 	uv run ruff check src/ tests/
 
-format:
+format: ## Auto-format code (ruff format)
 	uv run ruff format src/ tests/
 
-format-check:
+format-check: ## Check formatting without changes
 	uv run ruff format --check src/ tests/
 
-typecheck:
+typecheck: ## Run type checker (mypy)
 	uv run mypy src/hotel_agent/
 
-test:
+test: ## Run test suite (pytest)
 	uv run pytest
 
-check: lint format-check typecheck test
+check: lint format-check typecheck test ## Run all quality checks
+
+# ── Version ───────────────────────────────────────────
+# Tags: vYYYY.MM.DD (first of day), vYYYY.MM.DD-N (patches)
+# git describe output -> version:
+#   v2026.03.21           -> 2026.03.21
+#   v2026.03.21-1         -> 2026.03.21-1
+#   v2026.03.21-3-gabcdef -> 2026.03.21+3.gabcdef (dev build, 3 commits after tag)
+#   (no tags)             -> 0.0.0+SHA
+
+VERSION := $(shell V=$$(git describe --tags --match 'v*' 2>/dev/null | sed 's/^v//' | sed 's/-\([0-9]*\)-g/+\1.g/' || true); if [ -z "$$V" ]; then V="0.0.0+$$(git rev-parse --short HEAD)"; fi; echo "$$V")
 
 # ── Build & Distribution ──────────────────────────────
 
 DIST_NAME := HotelPriceTracker
-DIST_DIR  := dist/$(DIST_NAME)
 PORT      := 8470
 
 # Detect platform
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-    PLATFORM := macos
-    UV_ASSET := uv-aarch64-apple-darwin.tar.gz
+    PLATFORM := macos-arm64
     ICON     := assets/icon.icns
 else ifeq ($(OS),Windows_NT)
-    PLATFORM := windows
-    UV_ASSET := uv-x86_64-pc-windows-msvc.zip
+    PLATFORM := windows-x86_64
     ICON     := assets/icon.ico
 else
-    PLATFORM := linux
-    UV_ASSET := uv-x86_64-unknown-linux-gnu.tar.gz
+    PLATFORM := linux-x86_64
     ICON     := assets/icon.png
 endif
 
-build: install-gui
+DIST_ZIP  := $(DIST_NAME)-$(VERSION)-$(PLATFORM).zip
+DIST_DIR  := dist/$(DIST_NAME)
+
+build: install-gui ## Build PyInstaller launcher for current platform
 	uv run pyinstaller \
 		--name $(DIST_NAME) \
 		--windowed \
@@ -58,21 +72,83 @@ build: install-gui
 		src/hotel_agent/launcher.py
 	@echo "Build complete: dist/$(DIST_NAME)/"
 
-dist: build
+dist: build ## Package distribution zip for current platform
 	@mkdir -p $(DIST_DIR)/tools $(DIST_DIR)/assets
-	# Copy app source and config
 	cp -r src $(DIST_DIR)/
 	cp pyproject.toml uv.lock $(DIST_DIR)/
 	cp config.example.yaml $(DIST_DIR)/
 	cp .env.example $(DIST_DIR)/
 	cp -r assets $(DIST_DIR)/
-	# Copy the built launcher
 	cp -r dist/$(DIST_NAME)/* $(DIST_DIR)/ 2>/dev/null || true
-	# Create zip
-	cd dist && zip -r $(DIST_NAME)-$(PLATFORM).zip $(DIST_NAME)/
+	cd dist && python3 -m zipfile -c $(DIST_ZIP) $(DIST_NAME)/
 	@echo ""
-	@echo "Distribution ready: dist/$(DIST_NAME)-$(PLATFORM).zip"
+	@echo "Distribution ready: dist/$(DIST_ZIP)"
 	@echo "Note: add the platform-specific uv binary to $(DIST_DIR)/tools/ before shipping."
 
-clean:
+clean: ## Remove build artifacts
 	rm -rf build/ dist/ *.spec __pycache__
+
+# ── Release ───────────────────────────────────────────
+
+release: ## Tag a release (vYYYY.MM.DD or vYYYY.MM.DD-N) and push
+	@TODAY=$$(date -u +%Y.%m.%d); \
+	EXISTING=$$(git tag -l "v$$TODAY" "v$$TODAY-*" | sort -V); \
+	if [ -z "$$EXISTING" ]; then \
+		TAG="v$$TODAY"; \
+	else \
+		LAST=$$(echo "$$EXISTING" | tail -1); \
+		if [ "$$LAST" = "v$$TODAY" ]; then \
+			TAG="v$$TODAY-1"; \
+		else \
+			N=$$(echo "$$LAST" | sed "s/v$$TODAY-//"); \
+			TAG="v$$TODAY-$$((N + 1))"; \
+		fi; \
+	fi; \
+	echo "Tagging: $$TAG"; \
+	git tag "$$TAG"; \
+	git push origin "$$TAG"; \
+	echo "Tag $$TAG pushed — release workflow will build all platforms."
+
+# ── Multi-platform Distribution ───────────────────────
+
+dist-ci: ## Build all platforms via GitHub Actions (requires gh CLI)
+	@command -v gh >/dev/null 2>&1 || { echo "Error: gh CLI not found. Install: https://cli.github.com"; exit 1; }
+	@echo "Triggering multi-platform build on GitHub Actions..."
+	@echo "Version: $(VERSION)"
+	-rm -rf dist
+	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	gh workflow run release.yml --ref "$$BRANCH"
+	@echo "Waiting for workflow to start..."
+	@sleep 10
+	@RUN_ID=$$(gh run list -w release.yml -L 1 --json databaseId -q '.[0].databaseId'); \
+	echo "Run ID: $$RUN_ID — monitoring at:"; \
+	echo "  https://github.com/$$(gh repo view --json nameWithOwner -q .nameWithOwner)/actions/runs/$$RUN_ID"; \
+	echo ""; \
+	gh run watch "$$RUN_ID"; \
+	STATUS=$$(gh run view "$$RUN_ID" --json conclusion -q .conclusion); \
+	if [ "$$STATUS" != "success" ]; then \
+		echo "Error: workflow failed ($$STATUS). Check the link above."; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "Downloading artifacts..."; \
+	mkdir -p dist; \
+	gh run download "$$RUN_ID" -D dist/; \
+	echo ""; \
+	echo "All platform builds downloaded to dist/:";\
+	ls dist/**/*.zip 2>/dev/null || ls dist/*/*.zip 2>/dev/null
+
+dist-docker: ## Build Linux via act + Docker locally (requires docker)
+	@command -v act >/dev/null 2>&1 || command -v $(HOME)/.cache/act-runner/act >/dev/null 2>&1 || \
+		{ echo "Error: act not found. Install: https://github.com/nektos/act"; exit 1; }
+	@ACT=$$(command -v act 2>/dev/null || echo "$(HOME)/.cache/act-runner/act"); \
+	echo "Building Linux distributions locally via act + Docker..."; \
+	echo "(macOS/Windows builds require GitHub Actions — use 'make dist-ci')"; \
+	echo ""; \
+	mkdir -p dist; \
+	"$$ACT" -W .github/workflows/release.yml \
+		--artifact-server-path dist/act-artifacts \
+		--matrix os:ubuntu-latest \
+		-j build; \
+	echo ""; \
+	echo "Linux build artifacts saved to dist/act-artifacts/"

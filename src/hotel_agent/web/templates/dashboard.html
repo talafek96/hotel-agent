@@ -1,6 +1,40 @@
 {% extends "base.html" %}
 {% from "_macros.html" import platform_badge %}
 {% block title %}Dashboard{% endblock %}
+{% block tutorial %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (!localStorage.getItem('getting_started_dismissed')) {
+        var el = document.getElementById('getting-started');
+        if (el) el.style.display = 'block';
+    }
+});
+</script>
+<div class="getting-started" id="getting-started" style="display:none;">
+    <h3>Getting Started</h3>
+    <div class="gs-item">
+        <span class="gs-check {% if onboarding.llm %}gs-done{% else %}gs-pending{% endif %}">{% if onboarding.llm %}&#10003;{% else %}&#9711;{% endif %}</span>
+        {% if onboarding.llm %}AI provider configured ({{ onboarding.llm_detail }}){% else %}<a href="/config">Set up an AI provider</a> for Excel parsing and hotel matching{% endif %}
+    </div>
+    <div class="gs-item">
+        <span class="gs-check {% if onboarding.serpapi %}gs-done{% else %}gs-pending{% endif %}">{% if onboarding.serpapi %}&#10003;{% else %}&#9711;{% endif %}</span>
+        {% if onboarding.serpapi %}SerpAPI configured{% else %}<a href="/config">Add your SerpAPI key</a> to fetch hotel prices{% endif %}
+    </div>
+    <div class="gs-item">
+        <span class="gs-check {% if onboarding.imported %}gs-done{% else %}gs-pending{% endif %}">{% if onboarding.imported %}&#10003;{% else %}&#9711;{% endif %}</span>
+        {% if onboarding.imported %}{{ onboarding.import_detail }} — <a href="/bookings">review them</a>{% else %}<a href="/import">Import your hotel bookings</a> from Excel{% endif %}
+    </div>
+    <div class="gs-item">
+        <span class="gs-check {% if stats.price_snapshots > 0 %}gs-done{% else %}gs-pending{% endif %}">{% if stats.price_snapshots > 0 %}&#10003;{% else %}&#9711;{% endif %}</span>
+        {% if stats.price_snapshots > 0 %}{{ stats.price_snapshots }} price snapshots collected{% else %}<a href="/scrape">Fetch current prices</a> to start tracking{% endif %}
+    </div>
+    <div class="gs-item">
+        <span class="gs-check {% if onboarding.telegram or onboarding.email %}gs-done{% else %}gs-pending{% endif %}">{% if onboarding.telegram or onboarding.email %}&#10003;{% else %}&#9711;{% endif %}</span>
+        {% if onboarding.telegram or onboarding.email %}Notifications configured{% else %}<a href="/config">Set up notifications</a> (Telegram or Email) to get alerts{% endif %}
+    </div>
+    <button class="gs-dismiss" onclick="dismissGettingStarted()">Dismiss — I know my way around</button>
+</div>
+{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
 

@@ -1,8 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Bookings{% endblock %}
 {% block topbar_title %}Bookings{% endblock %}
+{% block tutorial %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('tour_bookings_done')) return;
+    var driverObj = window.driver.js.driver({
+        showProgress: true,
+        animate: true,
+        overlayColor: "rgba(0,0,0,0.6)",
+        stagePadding: 8,
+        stageRadius: 8,
+        popoverOffset: 12,
+        onDestroyed: function() { localStorage.setItem('tour_bookings_done', '1'); },
+        steps: [
+            { popover: { title: 'Review Your Bookings', description: 'Your bookings were imported using AI. Please review each one to make sure dates, prices, and hotel names are correct.' }},
+            { element: '.card', popover: { title: 'Booking Card', description: 'Each card shows one hotel booking. Click it to edit details, correct mistakes, or add missing info.', side: 'bottom' }},
+            { element: '.sidebar-nav a[href="/scheduler"]', popover: { title: 'Next: Set Up Scheduler', description: 'Once you\'ve reviewed your bookings, set up the Scheduler to automatically check prices on a regular basis.', side: 'right' }},
+        ]
+    });
+    driverObj.drive();
+});
+</script>
+{% endblock %}
 {% block content %}
 <h1>Active Bookings ({{ bookings|length }})</h1>
+
 <div style="margin-bottom:1.25rem;">
     <a href="/bookings/new" class="btn btn-primary">+ Add Booking</a>
 </div>

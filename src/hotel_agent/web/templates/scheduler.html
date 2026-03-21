@@ -1,6 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Scheduler{% endblock %}
 {% block topbar_title %}Scheduler{% endblock %}
+{% block tutorial %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('tour_scheduler_done')) return;
+    var driverObj = window.driver.js.driver({
+        showProgress: true,
+        animate: true,
+        overlayColor: "rgba(0,0,0,0.6)",
+        stagePadding: 8,
+        stageRadius: 8,
+        popoverOffset: 12,
+        onDestroyed: function() { localStorage.setItem('tour_scheduler_done', '1'); },
+        steps: [
+            { popover: { title: 'Automate Price Checking', description: 'The scheduler runs the full pipeline (scrape prices, analyze, send alerts) automatically on a schedule you choose.' }},
+            { element: '#mode', popover: { title: 'Choose Schedule Type', description: 'Pick interval (every N hours), daily (at a fixed time), or weekly (on specific days).', side: 'bottom' }},
+            { element: '.sidebar-nav a[href="/config"]', popover: { title: 'Configure Alerts', description: 'Visit Config to set alert thresholds (minimum savings, upgrade cost limits) and notification preferences.', side: 'right' }},
+        ]
+    });
+    driverObj.drive();
+});
+</script>
+{% endblock %}
 {% block content %}
 
 <style>

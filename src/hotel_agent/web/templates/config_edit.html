@@ -1,6 +1,35 @@
 {% extends "base.html" %}
 {% block title %}Configuration{% endblock %}
 {% block topbar_title %}Configuration{% endblock %}
+{% block tutorial %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('tour_config_done')) return;
+    var driverObj = window.driver.js.driver({
+        showProgress: true,
+        animate: true,
+        overlayColor: "rgba(0,0,0,0.6)",
+        stagePadding: 8,
+        stageRadius: 8,
+        popoverOffset: 12,
+        onDestroyed: function() { localStorage.setItem('tour_config_done', '1'); },
+        steps: [
+            { popover: { title: 'Configuration', description: 'All your settings live here — travelers, AI model, currency, alert thresholds, notifications, and API keys. Changes are saved to config.yaml when you click Save.' }},
+            { element: '#travelers_adults', popover: { title: 'Default Travelers', description: 'Set the default number of adults and children for price searches. These are used when fetching hotel prices from Google Hotels. You can override them per booking.', side: 'bottom' }},
+            { element: '#llm_provider', popover: { title: 'AI Provider', description: 'Choose which AI service parses your Excel files and analyzes prices. OpenAI (GPT), Anthropic (Claude), or Google (Gemini). Pick whichever you have an API key for.', side: 'bottom' }},
+            { element: '#llm_model', popover: { title: 'AI Model', description: 'Click "Load models" to see available models from your provider. Cheaper models (e.g. gpt-4o-mini) work fine for most tasks.', side: 'bottom' }},
+            { element: '#currency_base', popover: { title: 'Base Currency', description: 'Your home currency. All price comparisons and alerts will be shown in this currency. Set exchange rates below if your bookings are in other currencies.', side: 'bottom' }},
+            { element: '#alert_pd_abs', popover: { title: 'Alert Thresholds', description: 'Control when you get notified. "Min Absolute Drop" is the minimum savings (e.g. $50). "Min Percentage" is the minimum discount (e.g. 5%). Both must be met to trigger an alert.', side: 'left' }},
+            { element: '#alert_up_cost', popover: { title: 'Room Upgrade Alerts', description: 'Get alerted when a better room is available for little extra cost. "Max Extra Cost" is the most you\'d pay more (e.g. $30). "Max Extra %" caps the increase (e.g. 10%).', side: 'left' }},
+            { element: 'input[name="notif_telegram"]', popover: { title: 'Notifications', description: 'Enable Telegram and/or email alerts. You\'ll need to set up the corresponding API keys below. Use "Send Test" buttons to verify your setup works.', side: 'left' }},
+            { element: '#autostart_toggle', popover: { title: 'Start on Login', description: 'Enable this to automatically launch the price tracker when you log in to your computer. Works on Windows, macOS, and Linux.', side: 'left' }},
+            { element: '.info-tooltip-trigger', popover: { title: 'API Key Help', description: 'Hover or click the (i) icon next to any API key for step-by-step instructions on where to get it. Keys marked "NOT SET" still need to be configured.', side: 'bottom' }},
+        ]
+    });
+    driverObj.drive();
+});
+</script>
+{% endblock %}
 {% block content %}
 <h1>Edit Configuration</h1>
 <p style="font-size:.875rem;color:#64748b;margin-bottom:1.5rem;">
@@ -65,7 +94,40 @@
     <h2>Currency</h2>
     <div class="form-group">
         <label for="currency_base">Base Currency</label>
-        <input type="text" id="currency_base" name="currency_base" value="{{ config.currency.base }}" placeholder="USD">
+        <select id="currency_base" name="currency_base" style="max-width:320px;">
+            {% set currencies = [
+                ("USD", "US Dollar", "\U0001F1FA\U0001F1F8"),
+                ("EUR", "Euro", "\U0001F1EA\U0001F1FA"),
+                ("GBP", "British Pound", "\U0001F1EC\U0001F1E7"),
+                ("ILS", "Israeli Shekel", "\U0001F1EE\U0001F1F1"),
+                ("JPY", "Japanese Yen", "\U0001F1EF\U0001F1F5"),
+                ("CAD", "Canadian Dollar", "\U0001F1E8\U0001F1E6"),
+                ("AUD", "Australian Dollar", "\U0001F1E6\U0001F1FA"),
+                ("CHF", "Swiss Franc", "\U0001F1E8\U0001F1ED"),
+                ("CNY", "Chinese Yuan", "\U0001F1E8\U0001F1F3"),
+                ("INR", "Indian Rupee", "\U0001F1EE\U0001F1F3"),
+                ("KRW", "South Korean Won", "\U0001F1F0\U0001F1F7"),
+                ("SGD", "Singapore Dollar", "\U0001F1F8\U0001F1EC"),
+                ("THB", "Thai Baht", "\U0001F1F9\U0001F1ED"),
+                ("TWD", "Taiwan Dollar", "\U0001F1F9\U0001F1FC"),
+                ("NZD", "New Zealand Dollar", "\U0001F1F3\U0001F1FF"),
+                ("SEK", "Swedish Krona", "\U0001F1F8\U0001F1EA"),
+                ("NOK", "Norwegian Krone", "\U0001F1F3\U0001F1F4"),
+                ("DKK", "Danish Krone", "\U0001F1E9\U0001F1F0"),
+                ("PLN", "Polish Zloty", "\U0001F1F5\U0001F1F1"),
+                ("CZK", "Czech Koruna", "\U0001F1E8\U0001F1FF"),
+                ("HUF", "Hungarian Forint", "\U0001F1ED\U0001F1FA"),
+                ("BRL", "Brazilian Real", "\U0001F1E7\U0001F1F7"),
+                ("MXN", "Mexican Peso", "\U0001F1F2\U0001F1FD"),
+                ("ZAR", "South African Rand", "\U0001F1FF\U0001F1E6"),
+                ("TRY", "Turkish Lira", "\U0001F1F9\U0001F1F7"),
+                ("AED", "UAE Dirham", "\U0001F1E6\U0001F1EA"),
+                ("SAR", "Saudi Riyal", "\U0001F1F8\U0001F1E6"),
+            ] %}
+            {% for code, name, flag in currencies %}
+            <option value="{{ code }}" {% if config.currency.base == code %}selected{% endif %}>{{ flag }} {{ code }} — {{ name }}</option>
+            {% endfor %}
+        </select>
     </div>
     <div class="form-group">
         <label for="currency_rates">Exchange Rates (YAML format, one per line)</label>
@@ -185,24 +247,53 @@
 </div>
 
 <div class="card">
+    <h2>System</h2>
+    <div class="form-group">
+        <label style="display:flex; align-items:center; gap:.5rem;">
+            <input type="checkbox" id="autostart_toggle"
+                   style="width:auto; margin-right:.25rem;"
+                   onchange="toggleAutostart(this)">
+            Start on login
+        </label>
+        <small id="autostart_status" style="color:#64748b; display:block; margin-top:.25rem;">
+            Checking...
+        </small>
+    </div>
+</div>
+
+<div class="card">
     <h2>API Keys &amp; Secrets</h2>
     <p style="font-size:.8rem; color:#64748b; margin-bottom:1rem;">
         Saved to <code>.env</code>. Values are hidden by default.
     </p>
     {% set secrets = [
-        ("OpenAI API Key", config.openai_api_key.get_secret_value(), "secret_openai_api_key"),
-        ("Gemini API Key", config.gemini_api_key.get_secret_value(), "secret_gemini_api_key"),
-        ("Anthropic API Key", config.anthropic_api_key.get_secret_value(), "secret_anthropic_api_key"),
-        ("SerpAPI Key", config.serpapi_key.get_secret_value(), "secret_serpapi_key"),
-        ("Telegram Bot Token", config.telegram_bot_token.get_secret_value(), "secret_telegram_bot_token"),
-        ("Telegram Chat ID", config.telegram_chat_id.get_secret_value(), "secret_telegram_chat_id"),
-        ("Gmail User", config.gmail_user.get_secret_value(), "secret_gmail_user"),
-        ("Gmail App Password", config.gmail_app_password.get_secret_value(), "secret_gmail_app_password"),
+        ("OpenAI API Key", config.openai_api_key.get_secret_value(), "secret_openai_api_key",
+         "Sign up at <a href='https://platform.openai.com/api-keys' target='_blank'>platform.openai.com</a>, go to API Keys, click \"Create new secret key\"."),
+        ("Gemini API Key", config.gemini_api_key.get_secret_value(), "secret_gemini_api_key",
+         "Sign in at <a href='https://aistudio.google.com/apikey' target='_blank'>aistudio.google.com</a> with Google, click \"Create API key\"."),
+        ("Anthropic API Key", config.anthropic_api_key.get_secret_value(), "secret_anthropic_api_key",
+         "Sign up at <a href='https://console.anthropic.com/settings/keys' target='_blank'>console.anthropic.com</a>, go to API Keys, click \"Create Key\"."),
+        ("SerpAPI Key", config.serpapi_key.get_secret_value(), "secret_serpapi_key",
+         "Sign up at <a href='https://serpapi.com/manage-api-key' target='_blank'>serpapi.com</a>. Free tier: 250 searches/month. Key is on the dashboard."),
+        ("Telegram Bot Token", config.telegram_bot_token.get_secret_value(), "secret_telegram_bot_token",
+         "Open Telegram, message <a href='https://t.me/BotFather' target='_blank'>@BotFather</a>, send /newbot and follow the prompts to get your token."),
+        ("Telegram Chat ID", config.telegram_chat_id.get_secret_value(), "secret_telegram_chat_id",
+         "Send a message to your bot, then visit api.telegram.org/bot{TOKEN}/getUpdates to find your chat ID in the response."),
+        ("Gmail User", config.gmail_user.get_secret_value(), "secret_gmail_user",
+         "Your full Gmail address (e.g. you@gmail.com). Used as the sender for email notifications."),
+        ("Gmail App Password", config.gmail_app_password.get_secret_value(), "secret_gmail_app_password",
+         "Generate at <a href='https://myaccount.google.com/apppasswords' target='_blank'>myaccount.google.com/apppasswords</a>. Requires 2FA enabled on your Google account."),
     ] %}
-    {% for label, value, field_name in secrets %}
+    {% for label, value, field_name, tooltip in secrets %}
     <div class="form-group" style="margin-bottom:.75rem;">
         <label for="{{ field_name }}" style="display:flex; align-items:center; justify-content:space-between;">
-            <span>{{ label }}</span>
+            <span style="display:flex; align-items:center; gap:.35rem;">
+                {{ label }}
+                <span class="info-tooltip-trigger" tabindex="0">
+                    <span class="info-icon">i</span>
+                    <span class="info-tooltip-bubble">{{ tooltip | safe }}</span>
+                </span>
+            </span>
             {% if value %}
             <span class="badge badge-green" style="font-size:.6rem;">SET</span>
             {% else %}
@@ -233,6 +324,53 @@
 </form>
 
 <script>
+// Load autostart state on page load
+(function() {
+    fetch('/api/autostart')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var cb = document.getElementById('autostart_toggle');
+            var status = document.getElementById('autostart_status');
+            cb.checked = data.enabled;
+            status.textContent = data.enabled
+                ? 'The app will start automatically when you log in.'
+                : 'The app will not start automatically.';
+        })
+        .catch(function() {
+            document.getElementById('autostart_status').textContent = 'Could not check autostart status.';
+        });
+})();
+
+function toggleAutostart(cb) {
+    var status = document.getElementById('autostart_status');
+    status.textContent = 'Saving...';
+    status.style.color = '#64748b';
+    fetch('/api/autostart', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled: cb.checked})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            status.textContent = 'Error: ' + data.error;
+            status.style.color = '#dc2626';
+            cb.checked = !cb.checked;
+        } else {
+            status.textContent = data.enabled
+                ? 'The app will start automatically when you log in.'
+                : 'The app will not start automatically.';
+            status.style.color = '#16a34a';
+            setTimeout(function() { status.style.color = '#64748b'; }, 2000);
+        }
+    })
+    .catch(function(e) {
+        status.textContent = 'Error: ' + e.message;
+        status.style.color = '#dc2626';
+        cb.checked = !cb.checked;
+    });
+}
+
 function toggleSecret(btn, inputId) {
     var input = document.getElementById(inputId);
     if (input.type === 'password') {

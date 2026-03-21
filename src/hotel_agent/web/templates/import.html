@@ -1,12 +1,76 @@
 {% extends "base.html" %}
 {% block title %}Import{% endblock %}
 {% block topbar_title %}Import Bookings{% endblock %}
+{% block tutorial %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('tour_import_done')) return;
+    var driverObj = window.driver.js.driver({
+        showProgress: true,
+        animate: true,
+        overlayColor: "rgba(0,0,0,0.6)",
+        stagePadding: 8,
+        stageRadius: 8,
+        popoverOffset: 12,
+        onDestroyed: function() { localStorage.setItem('tour_import_done', '1'); },
+        steps: [
+            { popover: { title: 'Import Hotel Bookings', description: 'Upload an Excel file with your bookings. The AI handles flexible column names — just make sure it has hotel names, dates, and prices.' }},
+            { element: '#file', popover: { title: 'Choose Your File', description: 'Select an .xlsx file from your computer.', side: 'bottom' }},
+            { element: '#sheet', popover: { title: 'Sheet Name', description: 'Enter the exact name of the sheet/tab that contains your hotel data.', side: 'bottom' }},
+            { element: '.btn-primary', popover: { title: 'Start Import', description: 'Click Import to start. The AI will parse your data — this may take a minute for large files.', side: 'left' }},
+        ]
+    });
+    driverObj.drive();
+});
+</script>
+{% endblock %}
 {% block content %}
+<style>
+.import-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 1000; align-items: center; justify-content: center;
+}
+.import-overlay.active { display: flex; }
+.import-spinner {
+    background: #fff; border-radius: .75rem; padding: 2.5rem 3rem;
+    text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.2); max-width: 400px;
+}
+.import-spinner h3 { margin-bottom: .75rem; font-size: 1.1rem; }
+.import-spinner p { color: #64748b; font-size: .85rem; margin-bottom: 1.25rem; }
+.progress-bar {
+    width: 100%; height: .5rem; background: #e2e8f0; border-radius: 9999px; overflow: hidden;
+}
+.progress-bar-fill {
+    height: 100%; width: 30%; background: #3b82f6; border-radius: 9999px;
+    animation: progress-indeterminate 1.5s ease-in-out infinite;
+}
+@keyframes progress-indeterminate {
+    0% { width: 10%; margin-left: 0; }
+    50% { width: 40%; margin-left: 30%; }
+    100% { width: 10%; margin-left: 90%; }
+}
+.import-spinner.success { background: #f0fdf4; }
+.import-spinner.success h3 { color: #166534; }
+.import-spinner.success .progress-bar-fill {
+    animation: none; width: 100%; margin-left: 0;
+    background: #22c55e; transition: width .5s ease;
+}
+.import-spinner.error { background: #fef2f2; }
+.import-spinner.error h3 { color: #991b1b; }
+.import-spinner.error .progress-bar-fill {
+    animation: none; width: 100%; margin-left: 0;
+    background: #ef4444; transition: width .5s ease;
+}
+</style>
+
 <h1>Import from Excel</h1>
 
 {% if result %}
     {% if result.success %}
-    <div class="alert-box alert-success">{{ result.message }}</div>
+    <div class="alert-box alert-success">
+        {{ result.message }}
+        <br>Go to <a href="/bookings">Bookings</a> to review and correct the imported data.
+    </div>
     {% else %}
     <div class="alert-box alert-error">Import failed: {{ result.message }}</div>
     {% endif %}
@@ -14,7 +78,7 @@
 
 <div class="card">
     <h2>Upload Excel File</h2>
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" onsubmit="return showImportProgress()">
         <div class="form-group">
             <label for="file">Excel File (.xlsx)</label>
             <input type="file" id="file" name="file" accept=".xlsx,.xls" required>
@@ -30,6 +94,76 @@
         <button type="submit" class="btn btn-primary">Import</button>
     </form>
 </div>
+
+<div class="import-overlay" id="import-overlay">
+    <div class="import-spinner" id="import-spinner">
+        <h3 id="import-title">Importing bookings...</h3>
+        <p id="import-msg">The AI is parsing your Excel file. This may take a minute depending on the file size.</p>
+        <div class="progress-bar"><div class="progress-bar-fill"></div></div>
+        <p id="import-result" style="display:none; font-size:.85rem; margin-top:.75rem;"></p>
+    </div>
+</div>
+
+<script>
+function showImportProgress() {
+    var overlay = document.getElementById('import-overlay');
+    // Reset state from any previous attempt
+    var spinner = document.getElementById('import-spinner');
+    spinner.className = 'import-spinner';
+    document.getElementById('import-title').textContent = 'Importing bookings...';
+    var msgEl = document.getElementById('import-msg');
+    msgEl.textContent = 'The AI is parsing your Excel file. This may take a minute depending on the file size.';
+    msgEl.style.display = '';
+    var resultEl = document.getElementById('import-result');
+    resultEl.style.display = 'none';
+    resultEl.textContent = '';
+    overlay.classList.add('active');
+
+    var form = document.querySelector('form');
+    var formData = new FormData(form);
+    fetch('/import', {method: 'POST', body: formData})
+        .then(function(resp) {
+            var status = resp.headers.get('X-Import-Status');
+            var errMsg = resp.headers.get('X-Import-Error');
+            return {status: status, error: errMsg};
+        })
+        .then(function(data) {
+            var spinner = document.getElementById('import-spinner');
+            var title = document.getElementById('import-title');
+            var msg = document.getElementById('import-msg');
+            var result = document.getElementById('import-result');
+
+            if (data.status === 'error') {
+                spinner.className = 'import-spinner error';
+                title.textContent = 'Import failed';
+                msg.style.display = 'none';
+                result.textContent = data.error || 'An unknown error occurred.';
+                result.style.display = 'block';
+                result.style.color = '#991b1b';
+                setTimeout(function() { overlay.classList.remove('active'); }, 5000);
+            } else {
+                spinner.className = 'import-spinner success';
+                title.textContent = 'Import successful!';
+                msg.style.display = 'none';
+                result.textContent = 'Bookings imported successfully.';
+                result.style.display = 'block';
+                result.style.color = '#166534';
+                setTimeout(function() {
+                    window.location.reload();
+                }, 3000);
+            }
+        })
+        .catch(function(err) {
+            var spinner = document.getElementById('import-spinner');
+            spinner.className = 'import-spinner error';
+            document.getElementById('import-title').textContent = 'Connection error';
+            document.getElementById('import-msg').textContent = err.message;
+            setTimeout(function() { overlay.classList.remove('active'); }, 3000);
+        });
+
+    return false;
+}
+</script>
 
 {% if result and result.success and result.pairs %}
 <div class="card">

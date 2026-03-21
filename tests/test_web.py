@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import date
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -602,3 +603,57 @@ class TestPlatformUrl:
 
         assert platform_url("rakuten_travel") == "https://travel.rakuten.co.jp"
         assert platform_url("jalan") == "https://www.jalan.net"
+
+
+class TestImportErrorHeader:
+    """Test that import failure returns X-Import-Error header."""
+
+    def test_import_bad_file_returns_error_header(self, seeded_env):
+        """POST /import with an invalid file should return X-Import-Error."""
+        client, *_ = seeded_env
+        import io
+
+        fake_file = io.BytesIO(b"not a real excel file")
+        resp = client.post(
+            "/import",
+            files={"file": ("bad.xlsx", fake_file, "application/octet-stream")},
+            data={"sheet": "Sheet1", "table": ""},
+        )
+        assert resp.headers.get("X-Import-Status") == "error"
+        err = resp.headers.get("X-Import-Error")
+        assert err is not None
+        assert len(err) > 0
+
+
+class TestAutostartAPI:
+    """Test autostart API endpoints."""
+
+    def test_get_autostart_status(self, client):
+        """GET /api/autostart returns enabled field."""
+        with patch("hotel_agent.launcher.Path.home", return_value=Path("/tmp/fake")):
+            resp = client.get("/api/autostart")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "enabled" in data
+        assert data["enabled"] is False
+
+    def test_post_autostart_toggle(self, client, tmp_path):
+        """POST /api/autostart toggles the setting."""
+        with (
+            patch("hotel_agent.launcher.Path.home", return_value=tmp_path),
+            patch("shutil.which", return_value="/usr/bin/uv"),
+        ):
+            resp = client.post(
+                "/api/autostart",
+                json={"enabled": True},
+            )
+            assert resp.status_code == 200
+            assert resp.json()["enabled"] is True
+
+            # Verify it's actually enabled
+            resp = client.get("/api/autostart")
+            assert resp.json()["enabled"] is True
+
+            # Disable
+            resp = client.post("/api/autostart", json={"enabled": False})
+            assert resp.json()["enabled"] is False

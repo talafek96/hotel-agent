@@ -684,8 +684,23 @@ def serve(
     _setup_logging(verbose)
 
     import os
+    import socket
 
     import uvicorn
+
+    # Check if port is already in use
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        if s.connect_ex((host, port)) == 0:
+            console.print(
+                f"[red]Port {port} is already in use.[/red]\n"
+                f"Another server may be running. To stop it:\n"
+                f"  [bold]lsof -ti :{port} | xargs kill[/bold]   (Linux/macOS)\n"
+                f"  [bold]taskkill /F /PID <pid>[/bold]           (Windows — find PID with: netstat -ano | findstr :{port})\n"
+                f"\n"
+                f"Or if you started the server via the launcher, run it with [bold]--stop[/bold]."
+            )
+            raise typer.Exit(1)
 
     log_level = "info" if verbose else "warning"
     console.print(f"Starting web dashboard at [bold]http://{host}:{port}[/bold]")

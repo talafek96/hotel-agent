@@ -156,8 +156,8 @@ class TestBookingCRUD:
         assert id1 == id2
         assert len(tmp_db.get_active_bookings()) == 1
 
-    def test_upsert_booking_dedup_by_dates_platform(self, tmp_db):
-        """Dedup by (hotel_id, check_in, check_out, platform) when no ref."""
+    def test_upsert_booking_no_dedup_without_reference(self, tmp_db):
+        """Without booking_reference, same hotel/dates/platform creates separate rows."""
         hotel_id = self._insert_hotel(tmp_db)
         b = Booking(
             hotel_id=hotel_id,
@@ -174,30 +174,6 @@ class TestBookingCRUD:
             booked_price=95000,
             platform="Booking.com",
         )
-        id2 = tmp_db.upsert_booking(b2)
-        assert id1 == id2
-        active = tmp_db.get_active_bookings()
-        assert len(active) == 1
-        assert active[0].booked_price == 95000  # updated
-
-    def test_upsert_booking_different_platform_not_deduped(self, tmp_db):
-        """Same dates but different platform should create separate bookings."""
-        hotel_id = self._insert_hotel(tmp_db)
-        b1 = Booking(
-            hotel_id=hotel_id,
-            check_in=date(2026, 8, 1),
-            check_out=date(2026, 8, 5),
-            booked_price=100000,
-            platform="Booking.com",
-        )
-        b2 = Booking(
-            hotel_id=hotel_id,
-            check_in=date(2026, 8, 1),
-            check_out=date(2026, 8, 5),
-            booked_price=95000,
-            platform="Agoda",
-        )
-        id1 = tmp_db.upsert_booking(b1)
         id2 = tmp_db.upsert_booking(b2)
         assert id1 != id2
         assert len(tmp_db.get_active_bookings()) == 2

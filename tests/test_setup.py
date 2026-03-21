@@ -157,31 +157,31 @@ class TestSetupWizardSteps:
             },
         )
         assert resp.status_code == 200
-        # Should advance to step 5 (Import)
-        assert "Import" in resp.text
+        # Should advance to step 5 (Settings)
+        assert "Basic Settings" in resp.text or "Settings" in resp.text
 
-    def test_step4_skip_link(self, setup_env):
+    def test_step5_settings(self, setup_env):
         client, *_ = setup_env
         resp = client.get("/setup?step=5")
         assert resp.status_code == 200
-        assert "Import" in resp.text
+        assert "Basic Settings" in resp.text or "Travelers" in resp.text
 
-    def test_step5_import_page(self, setup_env):
+    def test_step6_import_page(self, setup_env):
         client, *_ = setup_env
-        resp = client.get("/setup?step=5")
+        resp = client.get("/setup?step=6")
         assert resp.status_code == 200
         assert "Excel" in resp.text
         assert "AI" in resp.text.lower() or "parsing" in resp.text.lower()
 
-    def test_step5_skip_to_done(self, setup_env):
+    def test_step6_skip_to_done(self, setup_env):
         client, *_ = setup_env
-        resp = client.get("/setup?step=6")
+        resp = client.get("/setup?step=7")
         assert resp.status_code == 200
         assert "All Set" in resp.text or "Done" in resp.text
 
-    def test_step6_done_shows_summary(self, setup_env):
+    def test_step7_done_shows_summary(self, setup_env):
         client, *_ = setup_env
-        resp = client.get("/setup?step=6")
+        resp = client.get("/setup?step=7")
         assert resp.status_code == 200
         assert "AI Provider" in resp.text or "SerpAPI" in resp.text
 
@@ -189,7 +189,7 @@ class TestSetupWizardSteps:
         client, tmp_path, *_ = setup_env
         resp = client.post(
             "/setup",
-            data={"step": "6"},
+            data={"step": "7"},
             follow_redirects=False,
         )
         assert resp.status_code == 303
@@ -260,9 +260,61 @@ class TestSetupPreservesEnv:
 class TestSetupImport:
     """Tests for the Excel import step in the setup wizard."""
 
-    def test_import_step_without_file_advances(self, setup_env):
-        """Submitting step 5 without a file should advance to done."""
+    def test_import_step_without_file_shows_error(self, setup_env):
+        """Submitting step 6 without a file should show error."""
         client, *_ = setup_env
-        resp = client.post("/setup", data={"step": "5", "sheet": "", "table": ""})
+        resp = client.post("/setup", data={"step": "6", "sheet": "", "table": ""})
         assert resp.status_code == 200
-        assert "All Set" in resp.text or "Done" in resp.text
+        assert "Please select" in resp.text or "Import" in resp.text
+
+
+class TestSetupSkipBehavior:
+    """Tests for skip buttons and skipped-step warnings."""
+
+    def test_step2_skip_advances_without_saving(self, setup_env):
+        client, *_ = setup_env
+        resp = client.post("/setup", data={"step": "2", "skip": "1"})
+        assert resp.status_code == 200
+        assert "Hotel Price Data" in resp.text or "SerpAPI" in resp.text
+
+    def test_step3_skip_advances_without_saving(self, setup_env):
+        client, *_ = setup_env
+        resp = client.post("/setup", data={"step": "3", "skip": "1"})
+        assert resp.status_code == 200
+        assert "Notifications" in resp.text
+
+    def test_step7_shows_skipped_warnings(self, setup_env):
+        """Done page should show warnings for unconfigured items."""
+        client, *_ = setup_env
+        resp = client.get("/setup?step=7")
+        assert resp.status_code == 200
+        assert "Some steps were skipped" in resp.text
+        assert "Config" in resp.text
+
+    def test_step2_has_skip_link(self, setup_env):
+        client, *_ = setup_env
+        resp = client.get("/setup?step=2")
+        assert "Skip for now" in resp.text
+
+    def test_step3_has_skip_link(self, setup_env):
+        client, *_ = setup_env
+        resp = client.get("/setup?step=3")
+        assert "Skip for now" in resp.text
+
+
+class TestConfigTooltips:
+    """Tests for info tooltips on the config page."""
+
+    def test_config_page_has_tooltips(self, completed_env):
+        client, *_ = completed_env
+        resp = client.get("/config")
+        assert resp.status_code == 200
+        assert "info-tooltip-trigger" in resp.text
+        assert "info-icon" in resp.text
+
+    def test_tooltips_contain_signup_links(self, completed_env):
+        client, *_ = completed_env
+        resp = client.get("/config")
+        assert "platform.openai.com" in resp.text
+        assert "aistudio.google.com" in resp.text
+        assert "serpapi.com" in resp.text

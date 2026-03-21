@@ -94,6 +94,50 @@
         .skip-link { font-size: .8rem; color: #94a3b8; }
         .skip-link:hover { color: #64748b; }
 
+        .validation-error { color: #dc2626; font-size: .8rem; margin-top: .25rem; display: none; }
+        input.invalid { border-color: #ef4444; }
+        input.invalid:focus { box-shadow: 0 0 0 3px rgba(239,68,68,.15); }
+
+        /* Import progress overlay */
+        .import-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+            z-index: 1000; align-items: center; justify-content: center;
+        }
+        .import-overlay.active { display: flex; }
+        .import-spinner {
+            background: #fff; border-radius: .75rem; padding: 2.5rem 3rem;
+            text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.2); max-width: 400px;
+        }
+        .import-spinner h3 { margin-bottom: .75rem; font-size: 1.1rem; }
+        .import-spinner p { color: #64748b; font-size: .85rem; margin-bottom: 1.25rem; }
+        .progress-bar {
+            width: 100%; height: .5rem; background: #e2e8f0; border-radius: 9999px; overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%; width: 30%; background: #3b82f6; border-radius: 9999px;
+            animation: progress-indeterminate 1.5s ease-in-out infinite;
+        }
+        @keyframes progress-indeterminate {
+            0% { width: 10%; margin-left: 0; }
+            50% { width: 40%; margin-left: 30%; }
+            100% { width: 10%; margin-left: 90%; }
+        }
+        .import-spinner.success { background: #f0fdf4; }
+        .import-spinner.success h3 { color: #166534; }
+        .import-spinner.success .progress-bar-fill {
+            animation: none; width: 100%; margin-left: 0;
+            background: #22c55e; transition: width .5s ease;
+        }
+        .import-spinner.error { background: #fef2f2; }
+        .import-spinner.error h3 { color: #991b1b; }
+        .import-spinner.error .progress-bar-fill {
+            animation: none; width: 100%; margin-left: 0;
+            background: #ef4444; transition: width .5s ease;
+        }
+        .import-spinner .result-msg {
+            display: none; font-size: .85rem; margin-top: .75rem;
+        }
+
         .checklist { list-style: none; }
         .checklist li { padding: .5rem 0; font-size: .9rem; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: .5rem; }
         .checklist li:last-child { border-bottom: none; }
@@ -117,7 +161,7 @@
 
     <!-- Step indicator -->
     <div class="steps">
-        {% for i in range(1, 7) %}
+        {% for i in range(1, 8) %}
         <div class="step-dot {% if i < step %}done{% elif i == step %}active{% endif %}"></div>
         {% endfor %}
     </div>
@@ -126,8 +170,9 @@
     <div class="alert-box alert-error">{{ error }}</div>
     {% endif %}
 
-    <form method="post" {% if step == 5 %}enctype="multipart/form-data"{% endif %}>
+    <form method="post" {% if step == 6 %}enctype="multipart/form-data"{% endif %} id="setup-form">
     <input type="hidden" name="step" value="{{ step }}">
+    <input type="hidden" name="skip" id="skip-field" value="">
 
     <!-- ── Step 1: Welcome ── -->
     {% if step == 1 %}
@@ -190,8 +235,12 @@
             </div>
             <div class="form-group">
                 <label for="openai_model">Model</label>
-                <input type="text" id="openai_model" name="openai_model" value="{{ llm_model if llm_provider == 'openai' else 'gpt-4o-mini' }}" placeholder="gpt-4o-mini">
-                <p class="help-text">Default: gpt-4o-mini (fast and affordable)</p>
+                <div style="display:flex; gap:.5rem;">
+                    <input type="text" id="openai_model" name="openai_model" value="{{ llm_model if llm_provider == 'openai' else 'gpt-4o-mini' }}" placeholder="gpt-4o-mini" style="flex:1;" oninput="filterModelList('openai')">
+                    <button type="button" class="btn btn-secondary" onclick="loadModels('openai')" style="white-space:nowrap;">Load models</button>
+                </div>
+                <select id="openai_model_select" size="6" style="display:none; width:100%; margin-top:.25rem; font-size:.8rem;" onchange="pickModel('openai')"></select>
+                <p class="help-text" id="openai_model_status">Default: gpt-4o-mini (fast and affordable)</p>
             </div>
         </div>
 
@@ -206,8 +255,12 @@
             </div>
             <div class="form-group">
                 <label for="gemini_model">Model</label>
-                <input type="text" id="gemini_model" name="gemini_model" value="{{ llm_model if llm_provider == 'gemini' else 'gemini/gemini-2.0-flash' }}" placeholder="gemini/gemini-2.0-flash">
-                <p class="help-text">Default: gemini-2.0-flash (fast and free tier available)</p>
+                <div style="display:flex; gap:.5rem;">
+                    <input type="text" id="gemini_model" name="gemini_model" value="{{ llm_model if llm_provider == 'gemini' else 'gemini/gemini-2.0-flash' }}" placeholder="gemini/gemini-2.0-flash" style="flex:1;" oninput="filterModelList('gemini')">
+                    <button type="button" class="btn btn-secondary" onclick="loadModels('gemini')" style="white-space:nowrap;">Load models</button>
+                </div>
+                <select id="gemini_model_select" size="6" style="display:none; width:100%; margin-top:.25rem; font-size:.8rem;" onchange="pickModel('gemini')"></select>
+                <p class="help-text" id="gemini_model_status">Default: gemini-2.0-flash (fast and free tier available)</p>
             </div>
         </div>
 
@@ -222,15 +275,22 @@
             </div>
             <div class="form-group">
                 <label for="anthropic_model">Model</label>
-                <input type="text" id="anthropic_model" name="anthropic_model" value="{{ llm_model if llm_provider == 'anthropic' else 'claude-sonnet-4-20250514' }}" placeholder="claude-sonnet-4-20250514">
-                <p class="help-text">Default: claude-sonnet-4-20250514</p>
+                <div style="display:flex; gap:.5rem;">
+                    <input type="text" id="anthropic_model" name="anthropic_model" value="{{ llm_model if llm_provider == 'anthropic' else 'claude-sonnet-4-20250514' }}" placeholder="claude-sonnet-4-20250514" style="flex:1;" oninput="filterModelList('anthropic')">
+                    <button type="button" class="btn btn-secondary" onclick="loadModels('anthropic')" style="white-space:nowrap;">Load models</button>
+                </div>
+                <select id="anthropic_model_select" size="6" style="display:none; width:100%; margin-top:.25rem; font-size:.8rem;" onchange="pickModel('anthropic')"></select>
+                <p class="help-text" id="anthropic_model_status">Default: claude-sonnet-4-20250514</p>
             </div>
         </div>
     </div>
 
     <div class="btn-row">
         <a href="/setup?step=1" class="btn btn-secondary">Back</a>
-        <button type="submit" class="btn btn-primary">Next</button>
+        <div style="display:flex; gap:.75rem; align-items:center;">
+            <a href="#" class="skip-link" onclick="skipStep(); return false;">Skip for now</a>
+            <button type="submit" class="btn btn-primary" onclick="return validateStep2()">Next</button>
+        </div>
     </div>
 
     <!-- ── Step 3: SerpAPI Key ── -->
@@ -258,7 +318,10 @@
 
     <div class="btn-row">
         <a href="/setup?step=2" class="btn btn-secondary">Back</a>
-        <button type="submit" class="btn btn-primary">Next</button>
+        <div style="display:flex; gap:.75rem; align-items:center;">
+            <a href="#" class="skip-link" onclick="skipStep(); return false;">Skip for now</a>
+            <button type="submit" class="btn btn-primary" onclick="return validateStep3()">Next</button>
+        </div>
     </div>
 
     <!-- ── Step 4: Notifications ── -->
@@ -309,8 +372,79 @@
         </div>
     </div>
 
-    <!-- ── Step 5: Excel Import ── -->
+    <!-- ── Step 5: Settings ── -->
     {% elif step == 5 %}
+    <div class="card">
+        <h2>Basic Settings</h2>
+        <p class="subtitle">
+            Configure your default travelers and currency. You can change these anytime from the Config page.
+        </p>
+
+        <h3 style="font-size:.95rem; margin-bottom:.75rem;">Travelers (Default)</h3>
+        <div style="display:flex; gap:1rem;">
+            <div class="form-group" style="flex:1;">
+                <label for="travelers_adults">Adults</label>
+                <input type="number" id="travelers_adults" name="travelers_adults" value="{{ config.travelers.adults }}" min="1" max="10">
+            </div>
+            <div class="form-group" style="flex:2;">
+                <label for="travelers_children">Children Ages (comma-separated)</label>
+                <input type="text" id="travelers_children" name="travelers_children"
+                       value="{{ config.travelers.children_ages | join(', ') if config.travelers.children_ages else '' }}"
+                       placeholder="e.g. 4, 7">
+            </div>
+        </div>
+
+        <h3 style="font-size:.95rem; margin-bottom:.75rem; margin-top:1rem; padding-top:1rem; border-top:1px solid #e2e8f0;">Currency</h3>
+        <div class="form-group">
+            <label for="currency_base">Base Currency</label>
+            <select id="currency_base" name="currency_base" style="max-width:320px;">
+                {% set currencies = [
+                    ("USD", "US Dollar", "\U0001F1FA\U0001F1F8"),
+                    ("EUR", "Euro", "\U0001F1EA\U0001F1FA"),
+                    ("GBP", "British Pound", "\U0001F1EC\U0001F1E7"),
+                    ("ILS", "Israeli Shekel", "\U0001F1EE\U0001F1F1"),
+                    ("JPY", "Japanese Yen", "\U0001F1EF\U0001F1F5"),
+                    ("CAD", "Canadian Dollar", "\U0001F1E8\U0001F1E6"),
+                    ("AUD", "Australian Dollar", "\U0001F1E6\U0001F1FA"),
+                    ("CHF", "Swiss Franc", "\U0001F1E8\U0001F1ED"),
+                    ("CNY", "Chinese Yuan", "\U0001F1E8\U0001F1F3"),
+                    ("INR", "Indian Rupee", "\U0001F1EE\U0001F1F3"),
+                    ("KRW", "South Korean Won", "\U0001F1F0\U0001F1F7"),
+                    ("SGD", "Singapore Dollar", "\U0001F1F8\U0001F1EC"),
+                    ("THB", "Thai Baht", "\U0001F1F9\U0001F1ED"),
+                    ("TWD", "Taiwan Dollar", "\U0001F1F9\U0001F1FC"),
+                    ("NZD", "New Zealand Dollar", "\U0001F1F3\U0001F1FF"),
+                    ("SEK", "Swedish Krona", "\U0001F1F8\U0001F1EA"),
+                    ("NOK", "Norwegian Krone", "\U0001F1F3\U0001F1F4"),
+                    ("DKK", "Danish Krone", "\U0001F1E9\U0001F1F0"),
+                    ("PLN", "Polish Zloty", "\U0001F1F5\U0001F1F1"),
+                    ("CZK", "Czech Koruna", "\U0001F1E8\U0001F1FF"),
+                    ("HUF", "Hungarian Forint", "\U0001F1ED\U0001F1FA"),
+                    ("BRL", "Brazilian Real", "\U0001F1E7\U0001F1F7"),
+                    ("MXN", "Mexican Peso", "\U0001F1F2\U0001F1FD"),
+                    ("ZAR", "South African Rand", "\U0001F1FF\U0001F1E6"),
+                    ("TRY", "Turkish Lira", "\U0001F1F9\U0001F1F7"),
+                    ("AED", "UAE Dirham", "\U0001F1E6\U0001F1EA"),
+                    ("SAR", "Saudi Riyal", "\U0001F1F8\U0001F1E6"),
+                ] %}
+                {% for code, name, flag in currencies %}
+                <option value="{{ code }}" {% if config.currency.base == code %}selected{% endif %}>{{ flag }} {{ code }} — {{ name }}</option>
+                {% endfor %}
+            </select>
+            <p class="help-text">Your home currency for price comparisons. Exchange rates are fetched automatically when needed.</p>
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <a href="/setup?step=4" class="btn btn-secondary">Back</a>
+        <div style="display:flex; gap:.75rem; align-items:center;">
+            <a href="#" class="skip-link" onclick="skipStep(); return false;">Skip for now</a>
+            <button type="submit" class="btn btn-primary">Next</button>
+        </div>
+    </div>
+
+    <!-- ── Step 6: Excel Import ── -->
+    {% elif step == 6 %}
     <div class="card">
         <h2>Import Your Bookings</h2>
         <p class="subtitle">
@@ -344,7 +478,12 @@
 
         {% if import_result %}
             {% if import_result.success %}
-            <div class="success-box">{{ import_result.message }}</div>
+            <div class="success-box">
+                {{ import_result.message }}
+                <br><br>
+                <strong>Important:</strong> The AI did its best to parse your data, but some fields may need corrections.
+                After completing setup, go to the <a href="/bookings">Bookings</a> tab to review dates, prices, hotel names, and other details.
+            </div>
             {% else %}
             <div class="alert-box alert-error">Import failed: {{ import_result.message }}</div>
             {% endif %}
@@ -352,15 +491,15 @@
     </div>
 
     <div class="btn-row">
-        <a href="/setup?step=4" class="btn btn-secondary">Back</a>
+        <a href="/setup?step=5" class="btn btn-secondary">Back</a>
         <div style="display:flex; gap:.75rem;">
-            <a href="/setup?step=6&skip_import=1" class="skip-link" style="align-self:center;">Skip for now</a>
-            <button type="submit" class="btn btn-primary">Import &amp; Continue</button>
+            <a href="#" class="skip-link" style="align-self:center;" onclick="skipStep(); return false;">Skip for now</a>
+            <button type="submit" class="btn btn-primary" onclick="return validateAndImport()">Import &amp; Continue</button>
         </div>
     </div>
 
-    <!-- ── Step 6: Done ── -->
-    {% elif step == 6 %}
+    <!-- ── Step 7: Done ── -->
+    {% elif step == 7 %}
     <div class="card">
         <h2>You're All Set!</h2>
         <p class="subtitle">Your Hotel Price Tracker is configured and ready to go.</p>
@@ -389,24 +528,66 @@
         </ul>
     </div>
 
-    {% if configured.imported %}
-    <div class="info-box">
-        <strong>Next step:</strong> Head to the <a href="/bookings">Bookings</a> tab to review your imported data.
-        Check that dates, prices, and hotel names look correct. The AI does its best, but some fields may need manual corrections.
-    </div>
-    {% else %}
-    <div class="info-box">
-        <strong>Next step:</strong> Go to the <a href="/import">Import</a> page to upload your hotel bookings Excel file.
+    {% if configured.skipped %}
+    <div class="warning-box">
+        <strong>Some steps were skipped.</strong> You can complete them anytime:
+        <ul style="margin-top:.5rem; margin-left:1.25rem; font-size:.85rem;">
+            {% for item in configured.skipped %}
+            <li style="margin-bottom:.25rem;">
+                {{ item.label }} — go to the <a href="{{ item.link }}">{{ item.page }}</a> page
+                {% if item.detail %}<br><span style="color:#64748b; font-size:.8rem;">{{ item.detail }}</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
     </div>
     {% endif %}
 
+    {% if configured.imported %}
+    <div class="info-box">
+        <strong>What happens next:</strong> You'll be taken to the <strong>Bookings</strong> page to review your imported data.
+        Check that dates, prices, and hotel names are correct — the AI does its best, but some fields may need manual corrections.
+        After that, consider setting up the <strong>Scheduler</strong> to automatically check prices on a regular basis.
+    </div>
+    {% endif %}
+
+    <div class="card" style="background:#f8fafc;">
+        <h3 style="font-size:.9rem; margin-bottom:.5rem;">How to stop the server</h3>
+        <p style="font-size:.8rem; color:#475569;" id="shutdown-instructions"></p>
+    </div>
+    <script>
+    (function() {
+        var el = document.getElementById('shutdown-instructions');
+        var ua = navigator.userAgent.toLowerCase();
+        if (ua.indexOf('win') >= 0) {
+            el.innerHTML = 'Right-click the <strong>tray icon</strong> (hidden icons area in the taskbar) and choose <strong>Exit</strong>.';
+        } else if (ua.indexOf('mac') >= 0) {
+            el.innerHTML = 'Run the launcher again with <code>--stop</code>, or press <strong>Ctrl+C</strong> in the terminal.';
+        } else {
+            el.innerHTML = 'Run the launcher again with <code>--stop</code>, or press <strong>Ctrl+C</strong> in the terminal.';
+        }
+    })();
+    </script>
+
     <div class="btn-row">
-        <a href="/setup?step=5" class="btn btn-secondary">Back</a>
+        <a href="/setup?step=6" class="btn btn-secondary">Back</a>
+        {% if configured.imported %}
+        <button type="submit" class="btn btn-success">Review Bookings</button>
+        {% else %}
         <button type="submit" class="btn btn-success">Go to Dashboard</button>
+        {% endif %}
     </div>
 
     {% endif %}
     </form>
+</div>
+
+<div class="import-overlay" id="import-overlay">
+    <div class="import-spinner" id="import-spinner">
+        <h3 id="import-spinner-title">Importing bookings...</h3>
+        <p id="import-spinner-msg">The AI is parsing your Excel file. This may take a minute depending on the file size.</p>
+        <div class="progress-bar"><div class="progress-bar-fill"></div></div>
+        <p class="result-msg" id="import-result-msg"></p>
+    </div>
 </div>
 
 <script>
@@ -420,6 +601,218 @@ function selectProvider(el, provider) {
     });
     var fields = document.getElementById(provider + '-fields');
     if (fields) fields.style.display = 'block';
+}
+
+function skipStep() {
+    document.getElementById('skip-field').value = '1';
+    document.getElementById('setup-form').submit();
+}
+
+function showValidationError(inputId, message) {
+    var input = document.getElementById(inputId);
+    if (!input) return;
+    input.classList.add('invalid');
+    var err = input.parentElement.querySelector('.validation-error');
+    if (!err) {
+        err = document.createElement('p');
+        err.className = 'validation-error';
+        input.parentElement.appendChild(err);
+    }
+    err.textContent = message;
+    err.style.display = 'block';
+    input.focus();
+}
+
+function clearValidation() {
+    document.querySelectorAll('.invalid').forEach(function(el) { el.classList.remove('invalid'); });
+    document.querySelectorAll('.validation-error').forEach(function(el) { el.style.display = 'none'; });
+}
+
+function validateStep2() {
+    clearValidation();
+    var provider = document.querySelector('input[name="llm_provider"]:checked');
+    if (!provider) return true;
+    var p = provider.value;
+    var keyField = {openai: 'openai_key', gemini: 'gemini_key', anthropic: 'anthropic_key'}[p];
+    var input = document.getElementById(keyField);
+    if (input && !input.value.trim()) {
+        showValidationError(keyField, 'Please enter your API key, or click "Skip for now" to configure later.');
+        return false;
+    }
+    return true;
+}
+
+function validateStep3() {
+    clearValidation();
+    var input = document.getElementById('serpapi_key');
+    if (input && !input.value.trim()) {
+        showValidationError('serpapi_key', 'Please enter your SerpAPI key, or click "Skip for now" to configure later.');
+        return false;
+    }
+    return true;
+}
+
+function validateAndImport() {
+    var fileInput = document.getElementById('file');
+    var sheetInput = document.getElementById('sheet');
+    if (!fileInput || !fileInput.files || !fileInput.files.length) {
+        alert('Please select an Excel file to upload, or click "Skip for now".');
+        return false;
+    }
+    if (!sheetInput || !sheetInput.value.trim()) {
+        alert('Please enter the sheet name.');
+        sheetInput.focus();
+        return false;
+    }
+
+    // Show progress overlay — reset state from any previous attempt
+    var overlay = document.getElementById('import-overlay');
+    var spinner = document.getElementById('import-spinner');
+    spinner.className = 'import-spinner';
+    document.getElementById('import-spinner-title').textContent = 'Importing bookings...';
+    var msg = document.getElementById('import-spinner-msg');
+    msg.textContent = 'The AI is parsing your Excel file. This may take a minute depending on the file size.';
+    msg.style.display = '';
+    var resultMsg = document.getElementById('import-result-msg');
+    resultMsg.style.display = 'none';
+    resultMsg.textContent = '';
+    overlay.classList.add('active');
+
+    // Submit via fetch so we can show result before navigating
+    var form = document.getElementById('setup-form');
+    var formData = new FormData(form);
+    fetch('/setup', {method: 'POST', body: formData})
+        .then(function(resp) {
+            var status = resp.headers.get('X-Import-Status');
+            var errMsg = resp.headers.get('X-Import-Error');
+            return {status: status, error: errMsg, ok: resp.ok};
+        })
+        .then(function(result) {
+            var spinner = document.getElementById('import-spinner');
+            var title = document.getElementById('import-spinner-title');
+            var msg = document.getElementById('import-spinner-msg');
+            var resultMsg = document.getElementById('import-result-msg');
+
+            if (result.status === 'error') {
+                spinner.classList.add('error');
+                title.textContent = 'Import failed';
+                msg.style.display = 'none';
+                resultMsg.textContent = result.error || 'An unknown error occurred.';
+                resultMsg.style.display = 'block';
+                resultMsg.style.color = '#991b1b';
+                setTimeout(function() {
+                    overlay.classList.remove('active');
+                }, 5000);
+            } else {
+                spinner.classList.add('success');
+                title.textContent = 'Import successful!';
+                msg.style.display = 'none';
+                resultMsg.textContent = 'Bookings imported successfully.';
+                resultMsg.style.display = 'block';
+                resultMsg.style.color = '#166534';
+                setTimeout(function() {
+                    window.location.href = '/setup?step=7';
+                }, 3000);
+            }
+        })
+        .catch(function(err) {
+            var spinner = document.getElementById('import-spinner');
+            spinner.classList.add('error');
+            document.getElementById('import-spinner-title').textContent = 'Connection error';
+            document.getElementById('import-spinner-msg').textContent = err.message;
+            setTimeout(function() { overlay.classList.remove('active'); }, 3000);
+        });
+
+    return false; // Prevent normal form submit
+}
+
+async function loadModels(provider) {
+    var keyFields = {openai: 'openai_key', gemini: 'gemini_key', anthropic: 'anthropic_key'};
+    var selectIds = {openai: 'openai_model_select', gemini: 'gemini_model_select', anthropic: 'anthropic_model_select'};
+    var statusIds = {openai: 'openai_model_status', gemini: 'gemini_model_status', anthropic: 'anthropic_model_status'};
+
+    var keyInput = document.getElementById(keyFields[provider]);
+    var status = document.getElementById(statusIds[provider]);
+    var sel = document.getElementById(selectIds[provider]);
+
+    if (!keyInput || !keyInput.value.trim()) {
+        status.textContent = 'Enter your API key first, then click Load models.';
+        status.style.color = '#dc2626';
+        return;
+    }
+
+    // Save the key first so the server can use it
+    var saveData = new URLSearchParams();
+    saveData.append('step', '2');
+    saveData.append('llm_provider', provider);
+    saveData.append(keyFields[provider].replace('_key', '_api_key'), keyInput.value);
+    await fetch('/setup', {method: 'POST', body: saveData});
+
+    status.textContent = 'Loading models...';
+    status.style.color = '#64748b';
+
+    try {
+        var resp = await fetch('/api/models?provider=' + encodeURIComponent(provider));
+        var data = await resp.json();
+        if (data.error) {
+            status.textContent = 'Error: ' + data.error;
+            status.style.color = '#dc2626';
+        } else {
+            var models = data.models || [];
+            sel.innerHTML = '';
+            models.forEach(function(m) {
+                var opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                sel.appendChild(opt);
+            });
+            // Store full list for filtering
+            sel.dataset.allModels = JSON.stringify(models);
+            sel.style.display = 'block';
+            status.textContent = models.length + ' models loaded. Click to select, or type to filter.';
+            status.style.color = '#16a34a';
+            // Scroll to current value
+            filterModelList(provider);
+        }
+    } catch (e) {
+        status.textContent = 'Failed to fetch models: ' + e.message;
+        status.style.color = '#dc2626';
+    }
+}
+
+function filterModelList(provider) {
+    var modelFields = {openai: 'openai_model', gemini: 'gemini_model', anthropic: 'anthropic_model'};
+    var selectIds = {openai: 'openai_model_select', gemini: 'gemini_model_select', anthropic: 'anthropic_model_select'};
+    var input = document.getElementById(modelFields[provider]);
+    var sel = document.getElementById(selectIds[provider]);
+    if (!sel.dataset.allModels) return;
+    var models = JSON.parse(sel.dataset.allModels);
+    var query = (input.value || '').toLowerCase();
+
+    sel.innerHTML = '';
+    var bestIdx = 0;
+    models.forEach(function(m, i) {
+        var opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        sel.appendChild(opt);
+        if (query && m.toLowerCase().indexOf(query) >= 0 && bestIdx === 0) {
+            bestIdx = i;
+        }
+    });
+    // Scroll to best match
+    if (sel.options.length > bestIdx) {
+        sel.selectedIndex = bestIdx;
+        sel.options[bestIdx].scrollIntoView({block: 'nearest'});
+    }
+}
+
+function pickModel(provider) {
+    var modelFields = {openai: 'openai_model', gemini: 'gemini_model', anthropic: 'anthropic_model'};
+    var selectIds = {openai: 'openai_model_select', gemini: 'gemini_model_select', anthropic: 'anthropic_model_select'};
+    var input = document.getElementById(modelFields[provider]);
+    var sel = document.getElementById(selectIds[provider]);
+    input.value = sel.value;
 }
 </script>
 

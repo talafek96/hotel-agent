@@ -143,6 +143,7 @@ Return a JSON object with this exact structure:
       "is_cancellable": true,
       "cancellation_deadline": "YYYY-MM-DD or null",
       "breakfast_included": false,
+      "dinner_included": false,
       "extras": "any extras noted",
       "notes": "any relevant notes"
     }
@@ -225,6 +226,7 @@ def excel_to_models(
             is_cancellable=bool(entry.get("is_cancellable", False)),
             cancellation_deadline=parse_date(entry.get("cancellation_deadline")),
             breakfast_included=bool(entry.get("breakfast_included", False)),
+            dinner_included=bool(entry.get("dinner_included", False)),
             platform=entry.get("platform", ""),
             booking_reference=entry.get("booking_reference", ""),
             booking_url=entry.get("booking_url", "") or entry.get("url", ""),

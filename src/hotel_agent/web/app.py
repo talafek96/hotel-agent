@@ -36,6 +36,21 @@ def create_app(config_path: str | None = None) -> FastAPI:
     if config_path is None:
         config_path = os.environ.get("HOTEL_AGENT_CONFIG", "config.yaml")
     app = FastAPI(title="Hotel Price Tracker")
+
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(request: Request, exc: Exception):
+        """Log full traceback for any unhandled exception (500 errors)."""
+        import traceback
+
+        tb = traceback.format_exception(type(exc), exc, exc.__traceback__)
+        log.error(
+            "Unhandled exception on %s %s:\n%s",
+            request.method,
+            request.url.path,
+            "".join(tb),
+        )
+        return HTMLResponse("Internal Server Error", status_code=500)
+
     templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
     templates.env.globals["platform_url"] = platform_url
     templates.env.globals["platform_urls_json"] = json_mod.dumps(PLATFORM_URLS)
@@ -101,6 +116,25 @@ def create_app(config_path: str | None = None) -> FastAPI:
             "email": has_email,
             "imported": imported,
             "import_detail": import_detail,
+            "skipped": [
+                item
+                for cond, item in [
+                    (not has_llm, {"label": "AI Provider", "link": "/config", "page": "Config"}),
+                    (not has_serpapi, {"label": "SerpAPI", "link": "/config", "page": "Config"}),
+                    (
+                        not has_telegram and not has_email,
+                        {
+                            "label": "Notifications",
+                            "link": "/config",
+                            "page": "Config",
+                            "detail": "Set up Telegram (Bot Token + Chat ID) or Email "
+                            "(Gmail + App Password) in the API Keys section",
+                        },
+                    ),
+                    (not imported, {"label": "Bookings", "link": "/import", "page": "Import"}),
+                ]
+                if cond
+            ],
         }
 
     @app.middleware("http")
@@ -124,9 +158,10 @@ def create_app(config_path: str | None = None) -> FastAPI:
             "secrets": secrets,
             "llm_provider": config.llm.provider,
             "llm_model": config.llm.model,
+            "config": config,
             "error": None,
             "import_result": None,
-            "configured": _configured_summary() if step == 6 else {},
+            "configured": _configured_summary() if step == 7 else {},
         }
         return templates.TemplateResponse(request, "setup.html", ctx)
 
@@ -134,6 +169,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
     async def setup_save(
         request: Request,
         step: int = Form(1),
+        skip: str = Form(""),
         # Step 2: LLM
         llm_provider: str = Form(""),
         openai_api_key: str = Form(""),
@@ -149,7 +185,11 @@ def create_app(config_path: str | None = None) -> FastAPI:
         telegram_chat_id: str = Form(""),
         gmail_user: str = Form(""),
         gmail_app_password: str = Form(""),
-        # Step 5: Import
+        # Step 5: Settings
+        travelers_adults: int = Form(0),
+        travelers_children: str = Form(""),
+        currency_base: str = Form(""),
+        # Step 6: Import
         file: UploadFile | None = File(None),  # noqa: B008
         sheet: str = Form(""),
         table: str = Form(""),
@@ -158,34 +198,36 @@ def create_app(config_path: str | None = None) -> FastAPI:
         error = None
         import_result = None
         next_step = step + 1
+        is_skip = skip == "1"
 
         try:
             if step == 1:
                 pass  # Welcome — just advance
 
             elif step == 2:
-                # Save LLM config
-                if llm_provider:
-                    config.llm.provider = llm_provider
-                    if llm_provider == "openai" and openai_model:
-                        config.llm.model = openai_model
-                    elif llm_provider == "gemini" and gemini_model:
-                        config.llm.model = gemini_model
-                    elif llm_provider == "anthropic" and anthropic_model:
-                        config.llm.model = anthropic_model
-                    save_config(config, config_path)
+                if not is_skip:
+                    # Save LLM config
+                    if llm_provider:
+                        config.llm.provider = llm_provider
+                        if llm_provider == "openai" and openai_model:
+                            config.llm.model = openai_model
+                        elif llm_provider == "gemini" and gemini_model:
+                            config.llm.model = gemini_model
+                        elif llm_provider == "anthropic" and anthropic_model:
+                            config.llm.model = anthropic_model
+                        save_config(config, config_path)
 
-                # Save API keys (only non-empty values)
-                if openai_api_key:
-                    config.openai_api_key = SecretStr(openai_api_key)
-                if gemini_api_key:
-                    config.gemini_api_key = SecretStr(gemini_api_key)
-                if anthropic_api_key:
-                    config.anthropic_api_key = SecretStr(anthropic_api_key)
-                save_secrets(config)
+                    # Save API keys (only non-empty values)
+                    if openai_api_key:
+                        config.openai_api_key = SecretStr(openai_api_key)
+                    if gemini_api_key:
+                        config.gemini_api_key = SecretStr(gemini_api_key)
+                    if anthropic_api_key:
+                        config.anthropic_api_key = SecretStr(anthropic_api_key)
+                    save_secrets(config)
 
             elif step == 3:
-                if serpapi_key:
+                if not is_skip and serpapi_key:
                     config.serpapi_key = SecretStr(serpapi_key)
                     save_secrets(config)
 
@@ -208,8 +250,29 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 save_config(config, config_path)
 
             elif step == 5:
-                # Excel import (optional)
-                if file and file.filename and sheet:
+                if not is_skip:
+                    # Save travelers and currency settings
+                    if travelers_adults > 0:
+                        config.travelers.adults = travelers_adults
+                    ages: list[int] = []
+                    if travelers_children.strip():
+                        ages = [int(a.strip()) for a in travelers_children.split(",") if a.strip()]
+                    config.travelers.children_ages = ages
+                    if currency_base.strip():
+                        config.currency.base = currency_base.strip().upper()
+                    save_config(config, config_path)
+
+            elif step == 6:
+                if is_skip:
+                    pass  # Skip — advance to done
+                elif not file or not file.filename:
+                    error = "Please select an Excel file to upload, or click 'Skip for now'."
+                    next_step = step
+                elif not sheet.strip():
+                    error = "Please enter the sheet name."
+                    next_step = step
+                else:
+                    # Excel import
                     from ..llm.excel_parser import excel_to_models, parse_excel_with_llm
 
                     suffix = Path(file.filename).suffix
@@ -218,7 +281,9 @@ def create_app(config_path: str | None = None) -> FastAPI:
                         tmp_path = tmp.name
 
                     try:
-                        records = parse_excel_with_llm(config, tmp_path, sheet, table or None)
+                        records = parse_excel_with_llm(
+                            config, tmp_path, sheet.strip(), table.strip() or None
+                        )
                         pairs = excel_to_models(records, config.travelers)
 
                         with get_db() as db:
@@ -239,11 +304,14 @@ def create_app(config_path: str | None = None) -> FastAPI:
                         next_step = step  # Stay on import step on error
                     finally:
                         Path(tmp_path).unlink(missing_ok=True)
-                # If no file uploaded, just advance
 
-            elif step == 6:
-                # Done — mark setup complete and redirect to dashboard
+            elif step == 7:
+                # Done — mark setup complete
                 _mark_setup_complete()
+                # Redirect to bookings if data was imported, otherwise dashboard
+                summary = _configured_summary()
+                if summary["imported"]:
+                    return RedirectResponse("/bookings", status_code=303)
                 return RedirectResponse("/", status_code=303)
 
         except Exception as e:
@@ -260,11 +328,21 @@ def create_app(config_path: str | None = None) -> FastAPI:
             "secrets": secrets,
             "llm_provider": config.llm.provider,
             "llm_model": config.llm.model,
+            "config": config,
             "error": error,
             "import_result": import_result,
-            "configured": _configured_summary() if next_step == 6 else {},
+            "configured": _configured_summary() if next_step == 7 else {},
         }
-        return templates.TemplateResponse(request, "setup.html", ctx)
+        resp = templates.TemplateResponse(request, "setup.html", ctx)
+        # Signal import result to fetch-based JS (can't parse HTML reliably)
+        if step == 6:
+            if error or (import_result and not import_result.get("success")):
+                resp.headers["X-Import-Status"] = "error"
+                err_msg = error or str((import_result or {}).get("message", "Unknown error"))
+                resp.headers["X-Import-Error"] = err_msg
+            else:
+                resp.headers["X-Import-Status"] = "success"
+        return resp
 
     # ── Dashboard ──────────────────────────────────
     @app.get("/", response_class=HTMLResponse)
@@ -295,6 +373,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "stats": stats,
                 "alerts": alerts,
                 "bookings": booking_data[:10],
+                "onboarding": _configured_summary(),
             },
         )
 
@@ -382,7 +461,9 @@ def create_app(config_path: str | None = None) -> FastAPI:
         is_cancellable: str = Form(""),
         cancellation_deadline: str = Form(""),
         breakfast_included: str = Form(""),
+        dinner_included: str = Form(""),
         bathroom_type: str = Form("private"),
+        extras: str = Form(""),
         notes: str = Form(""),
     ):
         from datetime import date as date_cls
@@ -430,7 +511,9 @@ def create_app(config_path: str | None = None) -> FastAPI:
                         else None
                     ),
                     breakfast_included=breakfast_included == "1",
+                    dinner_included=dinner_included == "1",
                     bathroom_type=bathroom_type,
+                    extras=extras,
                 )
                 booking_id = db.upsert_booking(booking)
                 booking.id = booking_id
@@ -496,7 +579,9 @@ def create_app(config_path: str | None = None) -> FastAPI:
         is_cancellable: str = Form(""),
         cancellation_deadline: str = Form(""),
         breakfast_included: str = Form(""),
+        dinner_included: str = Form(""),
         bathroom_type: str = Form("private"),
+        extras: str = Form(""),
         notes: str = Form(""),
     ):
         from datetime import date as date_cls
@@ -531,7 +616,9 @@ def create_app(config_path: str | None = None) -> FastAPI:
                     date_cls.fromisoformat(cancellation_deadline) if cancellation_deadline else None
                 )
                 booking.breakfast_included = breakfast_included == "1"
+                booking.dinner_included = dinner_included == "1"
                 booking.bathroom_type = bathroom_type
+                booking.extras = extras
 
                 db.update_booking(booking)
             except Exception as e:
@@ -705,13 +792,17 @@ def create_app(config_path: str | None = None) -> FastAPI:
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
-        return templates.TemplateResponse(
+        resp = templates.TemplateResponse(
             request,
             "import.html",
             {
                 "result": result,
             },
         )
+        resp.headers["X-Import-Status"] = "success" if result.get("success") else "error"
+        if not result.get("success"):
+            resp.headers["X-Import-Error"] = str(result.get("message", "Unknown error"))
+        return resp
 
     # ── Scrape Runs History ─────────────────────────
     @app.get("/scrapes", response_class=HTMLResponse)
@@ -1528,5 +1619,27 @@ def create_app(config_path: str | None = None) -> FastAPI:
         except req.RequestException as e:
             log.warning("Failed to fetch models for %s: %s", provider, e)
             return JSONResponse({"error": str(e)}, 502)
+
+    # ── Autostart API ──────────────────────────────
+    @app.get("/api/autostart")
+    async def api_autostart_status():
+        """Check if the app is registered to start on OS login."""
+        from ..launcher import is_autostart_enabled
+
+        return {"enabled": is_autostart_enabled()}
+
+    @app.post("/api/autostart")
+    async def api_autostart_toggle(request: Request):
+        """Enable or disable autostart on OS login."""
+        from ..launcher import set_autostart
+
+        body = await request.json()
+        enable = bool(body.get("enabled", False))
+        try:
+            set_autostart(enable=enable)
+            return {"enabled": enable}
+        except Exception as e:
+            log.exception("Failed to toggle autostart")
+            return JSONResponse({"error": str(e)}, 500)
 
     return app

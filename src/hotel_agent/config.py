@@ -37,6 +37,15 @@ class CurrencyConfig(BaseModel):
     base: str = "USD"
     rates: dict[str, float] = {}
 
+    @field_validator("rates", mode="before")
+    @classmethod
+    def _coerce_rates(cls, v: object) -> dict[str, float]:
+        if v is None:
+            return {}
+        if isinstance(v, dict):
+            return v
+        return {}
+
     def convert(self, amount: float, from_currency: str) -> float:
         """Convert an amount to the base currency."""
         if from_currency == self.base:
