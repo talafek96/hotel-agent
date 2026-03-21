@@ -101,6 +101,15 @@ def create_app(config_path: str | None = None) -> FastAPI:
             "email": has_email,
             "imported": imported,
             "import_detail": import_detail,
+            "skipped": [
+                item
+                for cond, item in [
+                    (not has_llm, {"label": "AI Provider", "link": "/config", "page": "Config"}),
+                    (not has_serpapi, {"label": "SerpAPI", "link": "/config", "page": "Config"}),
+                    (not imported, {"label": "Bookings", "link": "/import", "page": "Import"}),
+                ]
+                if cond
+            ],
         }
 
     @app.middleware("http")
@@ -134,6 +143,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
     async def setup_save(
         request: Request,
         step: int = Form(1),
+        skip: str = Form(""),
         # Step 2: LLM
         llm_provider: str = Form(""),
         openai_api_key: str = Form(""),
@@ -158,34 +168,36 @@ def create_app(config_path: str | None = None) -> FastAPI:
         error = None
         import_result = None
         next_step = step + 1
+        is_skip = skip == "1"
 
         try:
             if step == 1:
                 pass  # Welcome — just advance
 
             elif step == 2:
-                # Save LLM config
-                if llm_provider:
-                    config.llm.provider = llm_provider
-                    if llm_provider == "openai" and openai_model:
-                        config.llm.model = openai_model
-                    elif llm_provider == "gemini" and gemini_model:
-                        config.llm.model = gemini_model
-                    elif llm_provider == "anthropic" and anthropic_model:
-                        config.llm.model = anthropic_model
-                    save_config(config, config_path)
+                if not is_skip:
+                    # Save LLM config
+                    if llm_provider:
+                        config.llm.provider = llm_provider
+                        if llm_provider == "openai" and openai_model:
+                            config.llm.model = openai_model
+                        elif llm_provider == "gemini" and gemini_model:
+                            config.llm.model = gemini_model
+                        elif llm_provider == "anthropic" and anthropic_model:
+                            config.llm.model = anthropic_model
+                        save_config(config, config_path)
 
-                # Save API keys (only non-empty values)
-                if openai_api_key:
-                    config.openai_api_key = SecretStr(openai_api_key)
-                if gemini_api_key:
-                    config.gemini_api_key = SecretStr(gemini_api_key)
-                if anthropic_api_key:
-                    config.anthropic_api_key = SecretStr(anthropic_api_key)
-                save_secrets(config)
+                    # Save API keys (only non-empty values)
+                    if openai_api_key:
+                        config.openai_api_key = SecretStr(openai_api_key)
+                    if gemini_api_key:
+                        config.gemini_api_key = SecretStr(gemini_api_key)
+                    if anthropic_api_key:
+                        config.anthropic_api_key = SecretStr(anthropic_api_key)
+                    save_secrets(config)
 
             elif step == 3:
-                if serpapi_key:
+                if not is_skip and serpapi_key:
                     config.serpapi_key = SecretStr(serpapi_key)
                     save_secrets(config)
 
