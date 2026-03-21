@@ -453,6 +453,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         cancellation_deadline: str = Form(""),
         breakfast_included: str = Form(""),
         bathroom_type: str = Form("private"),
+        extras: str = Form(""),
         notes: str = Form(""),
     ):
         from datetime import date as date_cls
@@ -501,6 +502,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                     ),
                     breakfast_included=breakfast_included == "1",
                     bathroom_type=bathroom_type,
+                    extras=extras,
                 )
                 booking_id = db.upsert_booking(booking)
                 booking.id = booking_id
@@ -567,6 +569,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         cancellation_deadline: str = Form(""),
         breakfast_included: str = Form(""),
         bathroom_type: str = Form("private"),
+        extras: str = Form(""),
         notes: str = Form(""),
     ):
         from datetime import date as date_cls
@@ -602,6 +605,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 )
                 booking.breakfast_included = breakfast_included == "1"
                 booking.bathroom_type = bathroom_type
+                booking.extras = extras
 
                 db.update_booking(booking)
             except Exception as e:

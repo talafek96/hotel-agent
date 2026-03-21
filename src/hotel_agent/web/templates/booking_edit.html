@@ -142,6 +142,8 @@ toggleNewHotel();
         <input type="date" id="cancellation_deadline" name="cancellation_deadline"
                value="{{ booking.cancellation_deadline or '' }}">
     </div>
+
+    <h3 style="font-size:.875rem; margin-top:1rem; margin-bottom:.5rem;">Meals</h3>
     <div class="form-group">
         <label>
             <input type="checkbox" name="breakfast_included" value="1"
@@ -150,6 +152,14 @@ toggleNewHotel();
             Breakfast included
         </label>
     </div>
+    <div class="form-group">
+        <label for="extras">Extras / Meal Plan</label>
+        <input type="text" id="extras" name="extras" value="{{ booking.extras }}"
+               placeholder="e.g. dinner included, half-board, airport shuttle">
+        <small style="color:#64748b;">Any additional inclusions — dinner, half-board, transfers, etc.</small>
+    </div>
+
+    <h3 style="font-size:.875rem; margin-top:1rem; margin-bottom:.5rem;">Room</h3>
     <div class="form-group">
         <label for="bathroom_type">Bathroom Type</label>
         <select id="bathroom_type" name="bathroom_type">
