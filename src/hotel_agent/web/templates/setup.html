@@ -221,10 +221,10 @@
             <div class="form-group">
                 <label for="openai_model">Model</label>
                 <div style="display:flex; gap:.5rem;">
-                    <input type="text" id="openai_model" name="openai_model" list="openai_model_list" value="{{ llm_model if llm_provider == 'openai' else 'gpt-4o-mini' }}" placeholder="gpt-4o-mini" style="flex:1;">
+                    <input type="text" id="openai_model" name="openai_model" value="{{ llm_model if llm_provider == 'openai' else 'gpt-4o-mini' }}" placeholder="gpt-4o-mini" style="flex:1;" oninput="filterModelList('openai')">
                     <button type="button" class="btn btn-secondary" onclick="loadModels('openai')" style="white-space:nowrap;">Load models</button>
                 </div>
-                <datalist id="openai_model_list"></datalist>
+                <select id="openai_model_select" size="6" style="display:none; width:100%; margin-top:.25rem; font-size:.8rem;" onchange="pickModel('openai')"></select>
                 <p class="help-text" id="openai_model_status">Default: gpt-4o-mini (fast and affordable)</p>
             </div>
         </div>
@@ -241,10 +241,10 @@
             <div class="form-group">
                 <label for="gemini_model">Model</label>
                 <div style="display:flex; gap:.5rem;">
-                    <input type="text" id="gemini_model" name="gemini_model" list="gemini_model_list" value="{{ llm_model if llm_provider == 'gemini' else 'gemini/gemini-2.0-flash' }}" placeholder="gemini/gemini-2.0-flash" style="flex:1;">
+                    <input type="text" id="gemini_model" name="gemini_model" value="{{ llm_model if llm_provider == 'gemini' else 'gemini/gemini-2.0-flash' }}" placeholder="gemini/gemini-2.0-flash" style="flex:1;" oninput="filterModelList('gemini')">
                     <button type="button" class="btn btn-secondary" onclick="loadModels('gemini')" style="white-space:nowrap;">Load models</button>
                 </div>
-                <datalist id="gemini_model_list"></datalist>
+                <select id="gemini_model_select" size="6" style="display:none; width:100%; margin-top:.25rem; font-size:.8rem;" onchange="pickModel('gemini')"></select>
                 <p class="help-text" id="gemini_model_status">Default: gemini-2.0-flash (fast and free tier available)</p>
             </div>
         </div>
@@ -261,10 +261,10 @@
             <div class="form-group">
                 <label for="anthropic_model">Model</label>
                 <div style="display:flex; gap:.5rem;">
-                    <input type="text" id="anthropic_model" name="anthropic_model" list="anthropic_model_list" value="{{ llm_model if llm_provider == 'anthropic' else 'claude-sonnet-4-20250514' }}" placeholder="claude-sonnet-4-20250514" style="flex:1;">
+                    <input type="text" id="anthropic_model" name="anthropic_model" value="{{ llm_model if llm_provider == 'anthropic' else 'claude-sonnet-4-20250514' }}" placeholder="claude-sonnet-4-20250514" style="flex:1;" oninput="filterModelList('anthropic')">
                     <button type="button" class="btn btn-secondary" onclick="loadModels('anthropic')" style="white-space:nowrap;">Load models</button>
                 </div>
-                <datalist id="anthropic_model_list"></datalist>
+                <select id="anthropic_model_select" size="6" style="display:none; width:100%; margin-top:.25rem; font-size:.8rem;" onchange="pickModel('anthropic')"></select>
                 <p class="help-text" id="anthropic_model_status">Default: claude-sonnet-4-20250514</p>
             </div>
         </div>
@@ -382,8 +382,41 @@
         <h3 style="font-size:.95rem; margin-bottom:.75rem; margin-top:1rem; padding-top:1rem; border-top:1px solid #e2e8f0;">Currency</h3>
         <div class="form-group">
             <label for="currency_base">Base Currency</label>
-            <input type="text" id="currency_base" name="currency_base" value="{{ config.currency.base }}" placeholder="USD" style="max-width:120px;">
-            <p class="help-text">Your home currency for price comparisons (e.g. USD, EUR, ILS)</p>
+            <select id="currency_base" name="currency_base" style="max-width:320px;">
+                {% set currencies = [
+                    ("USD", "US Dollar", "\U0001F1FA\U0001F1F8"),
+                    ("EUR", "Euro", "\U0001F1EA\U0001F1FA"),
+                    ("GBP", "British Pound", "\U0001F1EC\U0001F1E7"),
+                    ("ILS", "Israeli Shekel", "\U0001F1EE\U0001F1F1"),
+                    ("JPY", "Japanese Yen", "\U0001F1EF\U0001F1F5"),
+                    ("CAD", "Canadian Dollar", "\U0001F1E8\U0001F1E6"),
+                    ("AUD", "Australian Dollar", "\U0001F1E6\U0001F1FA"),
+                    ("CHF", "Swiss Franc", "\U0001F1E8\U0001F1ED"),
+                    ("CNY", "Chinese Yuan", "\U0001F1E8\U0001F1F3"),
+                    ("INR", "Indian Rupee", "\U0001F1EE\U0001F1F3"),
+                    ("KRW", "South Korean Won", "\U0001F1F0\U0001F1F7"),
+                    ("SGD", "Singapore Dollar", "\U0001F1F8\U0001F1EC"),
+                    ("THB", "Thai Baht", "\U0001F1F9\U0001F1ED"),
+                    ("TWD", "Taiwan Dollar", "\U0001F1F9\U0001F1FC"),
+                    ("NZD", "New Zealand Dollar", "\U0001F1F3\U0001F1FF"),
+                    ("SEK", "Swedish Krona", "\U0001F1F8\U0001F1EA"),
+                    ("NOK", "Norwegian Krone", "\U0001F1F3\U0001F1F4"),
+                    ("DKK", "Danish Krone", "\U0001F1E9\U0001F1F0"),
+                    ("PLN", "Polish Zloty", "\U0001F1F5\U0001F1F1"),
+                    ("CZK", "Czech Koruna", "\U0001F1E8\U0001F1FF"),
+                    ("HUF", "Hungarian Forint", "\U0001F1ED\U0001F1FA"),
+                    ("BRL", "Brazilian Real", "\U0001F1E7\U0001F1F7"),
+                    ("MXN", "Mexican Peso", "\U0001F1F2\U0001F1FD"),
+                    ("ZAR", "South African Rand", "\U0001F1FF\U0001F1E6"),
+                    ("TRY", "Turkish Lira", "\U0001F1F9\U0001F1F7"),
+                    ("AED", "UAE Dirham", "\U0001F1E6\U0001F1EA"),
+                    ("SAR", "Saudi Riyal", "\U0001F1F8\U0001F1E6"),
+                ] %}
+                {% for code, name, flag in currencies %}
+                <option value="{{ code }}" {% if config.currency.base == code %}selected{% endif %}>{{ flag }} {{ code }} — {{ name }}</option>
+                {% endfor %}
+            </select>
+            <p class="help-text">Your home currency for price comparisons. Exchange rates are fetched automatically when needed.</p>
         </div>
     </div>
 
@@ -485,7 +518,10 @@
         <strong>Some steps were skipped.</strong> You can complete them anytime:
         <ul style="margin-top:.5rem; margin-left:1.25rem; font-size:.85rem;">
             {% for item in configured.skipped %}
-            <li style="margin-bottom:.25rem;">{{ item.label }} — go to the <a href="{{ item.link }}">{{ item.page }}</a> page</li>
+            <li style="margin-bottom:.25rem;">
+                {{ item.label }} — go to the <a href="{{ item.link }}">{{ item.page }}</a> page
+                {% if item.detail %}<br><span style="color:#64748b; font-size:.8rem;">{{ item.detail }}</span>{% endif %}
+            </li>
             {% endfor %}
         </ul>
     </div>
@@ -500,11 +536,11 @@
 
     <div class="card" style="background:#f8fafc;">
         <h3 style="font-size:.9rem; margin-bottom:.5rem;">How to stop the server</h3>
-        <ul style="font-size:.8rem; color:#475569; margin-left:1rem;">
-            <li><strong>Windows:</strong> Right-click the tray icon and choose Exit</li>
-            <li><strong>Linux/macOS:</strong> Run the launcher again with <code>--stop</code></li>
-            <li><strong>Terminal:</strong> Press Ctrl+C in the terminal where the server is running</li>
-        </ul>
+        <p style="font-size:.8rem; color:#475569;">
+            <strong>Windows:</strong> Right-click the tray icon and choose <strong>Exit</strong>.
+            <strong>Linux/macOS:</strong> Run the launcher again with <code>--stop</code>.
+            Or press <strong>Ctrl+C</strong> in the terminal.
+        </p>
     </div>
 
     <div class="btn-row">
@@ -605,14 +641,12 @@ function validateAndImport() {
 
 async function loadModels(provider) {
     var keyFields = {openai: 'openai_key', gemini: 'gemini_key', anthropic: 'anthropic_key'};
-    var modelFields = {openai: 'openai_model', gemini: 'gemini_model', anthropic: 'anthropic_model'};
-    var listIds = {openai: 'openai_model_list', gemini: 'gemini_model_list', anthropic: 'anthropic_model_list'};
+    var selectIds = {openai: 'openai_model_select', gemini: 'gemini_model_select', anthropic: 'anthropic_model_select'};
     var statusIds = {openai: 'openai_model_status', gemini: 'gemini_model_status', anthropic: 'anthropic_model_status'};
 
     var keyInput = document.getElementById(keyFields[provider]);
     var status = document.getElementById(statusIds[provider]);
-    var datalist = document.getElementById(listIds[provider]);
-    var modelInput = document.getElementById(modelFields[provider]);
+    var sel = document.getElementById(selectIds[provider]);
 
     if (!keyInput || !keyInput.value.trim()) {
         status.textContent = 'Enter your API key first, then click Load models.';
@@ -629,7 +663,6 @@ async function loadModels(provider) {
 
     status.textContent = 'Loading models...';
     status.style.color = '#64748b';
-    datalist.innerHTML = '';
 
     try {
         var resp = await fetch('/api/models?provider=' + encodeURIComponent(provider));
@@ -639,19 +672,60 @@ async function loadModels(provider) {
             status.style.color = '#dc2626';
         } else {
             var models = data.models || [];
+            sel.innerHTML = '';
             models.forEach(function(m) {
                 var opt = document.createElement('option');
                 opt.value = m;
-                datalist.appendChild(opt);
+                opt.textContent = m;
+                sel.appendChild(opt);
             });
-            status.textContent = models.length + ' models loaded. Type or select from the dropdown.';
+            // Store full list for filtering
+            sel.dataset.allModels = JSON.stringify(models);
+            sel.style.display = 'block';
+            status.textContent = models.length + ' models loaded. Click to select, or type to filter.';
             status.style.color = '#16a34a';
-            modelInput.focus();
+            // Scroll to current value
+            filterModelList(provider);
         }
     } catch (e) {
         status.textContent = 'Failed to fetch models: ' + e.message;
         status.style.color = '#dc2626';
     }
+}
+
+function filterModelList(provider) {
+    var modelFields = {openai: 'openai_model', gemini: 'gemini_model', anthropic: 'anthropic_model'};
+    var selectIds = {openai: 'openai_model_select', gemini: 'gemini_model_select', anthropic: 'anthropic_model_select'};
+    var input = document.getElementById(modelFields[provider]);
+    var sel = document.getElementById(selectIds[provider]);
+    if (!sel.dataset.allModels) return;
+    var models = JSON.parse(sel.dataset.allModels);
+    var query = (input.value || '').toLowerCase();
+
+    sel.innerHTML = '';
+    var bestIdx = 0;
+    models.forEach(function(m, i) {
+        var opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        sel.appendChild(opt);
+        if (query && m.toLowerCase().indexOf(query) >= 0 && bestIdx === 0) {
+            bestIdx = i;
+        }
+    });
+    // Scroll to best match
+    if (sel.options.length > bestIdx) {
+        sel.selectedIndex = bestIdx;
+        sel.options[bestIdx].scrollIntoView({block: 'nearest'});
+    }
+}
+
+function pickModel(provider) {
+    var modelFields = {openai: 'openai_model', gemini: 'gemini_model', anthropic: 'anthropic_model'};
+    var selectIds = {openai: 'openai_model_select', gemini: 'gemini_model_select', anthropic: 'anthropic_model_select'};
+    var input = document.getElementById(modelFields[provider]);
+    var sel = document.getElementById(selectIds[provider]);
+    input.value = sel.value;
 }
 </script>
 

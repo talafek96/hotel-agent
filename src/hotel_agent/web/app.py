@@ -124,9 +124,11 @@ def create_app(config_path: str | None = None) -> FastAPI:
                     (
                         not has_telegram and not has_email,
                         {
-                            "label": "Notifications (Telegram / Email)",
+                            "label": "Notifications",
                             "link": "/config",
                             "page": "Config",
+                            "detail": "Set up Telegram (Bot Token + Chat ID) or Email "
+                            "(Gmail + App Password) in the API Keys section",
                         },
                     ),
                     (not imported, {"label": "Bookings", "link": "/import", "page": "Import"}),
