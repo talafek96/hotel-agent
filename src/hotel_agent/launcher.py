@@ -295,7 +295,7 @@ def main() -> None:
         log.info("Server already running at %s — opening browser.", URL)
         log.info(
             "To stop the server:\n"
-            "  Linux/macOS:  hotel-agent-gui --stop  (or: lsof -ti :%d | xargs kill)\n"
+            "  Linux/macOS:  lsof -ti :%d | xargs kill\n"
             "  Windows:      Right-click the tray icon → Exit",
             PORT,
         )
