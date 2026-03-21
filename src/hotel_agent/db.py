@@ -297,16 +297,18 @@ class Database:
             if row:
                 existing_id = row["id"]
 
-        # 2. Match by (hotel_id, check_in, check_out, platform)
+        # 2. Match by (hotel_id, check_in, check_out, platform, room_type)
+        #    Includes room_type so multiple rooms at the same hotel/dates aren't merged
         if not existing_id:
             row = self.conn.execute(
                 """SELECT id FROM bookings
-                   WHERE hotel_id=? AND check_in=? AND check_out=? AND platform=?""",
+                   WHERE hotel_id=? AND check_in=? AND check_out=? AND platform=? AND room_type=?""",
                 (
                     booking.hotel_id,
                     date_to_str(booking.check_in),
                     date_to_str(booking.check_out),
                     booking.platform,
+                    booking.room_type,
                 ),
             ).fetchone()
             if row:
