@@ -48,7 +48,7 @@ jobs:
         id: version
         shell: bash
         run: |
-          VER=$(git describe --tags --match 'v*' 2>/dev/null | sed 's/^v//' | sed 's/-/+/' | sed 's/-/./')
+          VER=$(git describe --tags --match 'v*' 2>/dev/null | sed 's/^v//' | sed 's/-/+/' | sed 's/-/./' || true)
           if [ -z "$VER" ]; then VER="0.0.0+$(git rev-parse --short HEAD)"; fi
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "Version: $VER"
