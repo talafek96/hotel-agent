@@ -1620,4 +1620,26 @@ def create_app(config_path: str | None = None) -> FastAPI:
             log.warning("Failed to fetch models for %s: %s", provider, e)
             return JSONResponse({"error": str(e)}, 502)
 
+    # ── Autostart API ──────────────────────────────
+    @app.get("/api/autostart")
+    async def api_autostart_status():
+        """Check if the app is registered to start on OS login."""
+        from ..launcher import is_autostart_enabled
+
+        return {"enabled": is_autostart_enabled()}
+
+    @app.post("/api/autostart")
+    async def api_autostart_toggle(request: Request):
+        """Enable or disable autostart on OS login."""
+        from ..launcher import set_autostart
+
+        body = await request.json()
+        enable = bool(body.get("enabled", False))
+        try:
+            set_autostart(enable=enable)
+            return {"enabled": enable}
+        except Exception as e:
+            log.exception("Failed to toggle autostart")
+            return JSONResponse({"error": str(e)}, 500)
+
     return app

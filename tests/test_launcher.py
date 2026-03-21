@@ -16,7 +16,9 @@ from hotel_agent.launcher import (
     _resolve_uv_path,
     _stop_linux_daemon,
     _wait_for_server,
+    is_autostart_enabled,
     is_server_running,
+    set_autostart,
 )
 
 
@@ -199,3 +201,35 @@ class TestStopLinuxDaemon:
             _stop_linux_daemon(tmp_path)
             mock_find.assert_called_once()
             mock_kill.assert_called_once_with(54321, signal.SIGTERM)
+
+
+class TestAutostart:
+    """Tests for autostart enable/disable/detect on Linux."""
+
+    def test_is_autostart_enabled_false_by_default(self, tmp_path):
+        """No desktop file → autostart disabled."""
+        with patch("hotel_agent.launcher.Path.home", return_value=tmp_path):
+            assert is_autostart_enabled() is False
+
+    def test_set_autostart_creates_desktop_file(self, tmp_path):
+        """Enabling autostart creates the .desktop file."""
+        with patch("hotel_agent.launcher.Path.home", return_value=tmp_path):
+            set_autostart(tmp_path, enable=True)
+        desktop = tmp_path / ".config" / "autostart" / "HotelPriceTracker.desktop"
+        assert desktop.exists()
+        content = desktop.read_text()
+        assert "X-GNOME-Autostart-enabled=true" in content
+
+    def test_set_autostart_then_detect(self, tmp_path):
+        """Enable → detect → True; disable → detect → False."""
+        with patch("hotel_agent.launcher.Path.home", return_value=tmp_path):
+            set_autostart(tmp_path, enable=True)
+            assert is_autostart_enabled() is True
+            set_autostart(tmp_path, enable=False)
+            assert is_autostart_enabled() is False
+
+    def test_disable_when_not_set(self, tmp_path):
+        """Disabling when not set should not raise."""
+        with patch("hotel_agent.launcher.Path.home", return_value=tmp_path):
+            set_autostart(tmp_path, enable=False)
+            assert is_autostart_enabled() is False

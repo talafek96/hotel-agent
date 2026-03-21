@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', function() {
             { element: '#alert_pd_abs', popover: { title: 'Alert Thresholds', description: 'Control when you get notified. "Min Absolute Drop" is the minimum savings (e.g. $50). "Min Percentage" is the minimum discount (e.g. 5%). Both must be met to trigger an alert.', side: 'left' }},
             { element: '#alert_up_cost', popover: { title: 'Room Upgrade Alerts', description: 'Get alerted when a better room is available for little extra cost. "Max Extra Cost" is the most you\'d pay more (e.g. $30). "Max Extra %" caps the increase (e.g. 10%).', side: 'left' }},
             { element: 'input[name="notif_telegram"]', popover: { title: 'Notifications', description: 'Enable Telegram and/or email alerts. You\'ll need to set up the corresponding API keys below. Use "Send Test" buttons to verify your setup works.', side: 'left' }},
+            { element: '#autostart_toggle', popover: { title: 'Start on Login', description: 'Enable this to automatically launch the price tracker when you log in to your computer. Works on Windows, macOS, and Linux.', side: 'left' }},
             { element: '.info-tooltip-trigger', popover: { title: 'API Key Help', description: 'Hover or click the (i) icon next to any API key for step-by-step instructions on where to get it. Keys marked "NOT SET" still need to be configured.', side: 'bottom' }},
         ]
     });
@@ -246,6 +247,21 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <div class="card">
+    <h2>System</h2>
+    <div class="form-group">
+        <label style="display:flex; align-items:center; gap:.5rem;">
+            <input type="checkbox" id="autostart_toggle"
+                   style="width:auto; margin-right:.25rem;"
+                   onchange="toggleAutostart(this)">
+            Start on login
+        </label>
+        <small id="autostart_status" style="color:#64748b; display:block; margin-top:.25rem;">
+            Checking...
+        </small>
+    </div>
+</div>
+
+<div class="card">
     <h2>API Keys &amp; Secrets</h2>
     <p style="font-size:.8rem; color:#64748b; margin-bottom:1rem;">
         Saved to <code>.env</code>. Values are hidden by default.
@@ -308,6 +324,53 @@ document.addEventListener('DOMContentLoaded', function() {
 </form>
 
 <script>
+// Load autostart state on page load
+(function() {
+    fetch('/api/autostart')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var cb = document.getElementById('autostart_toggle');
+            var status = document.getElementById('autostart_status');
+            cb.checked = data.enabled;
+            status.textContent = data.enabled
+                ? 'The app will start automatically when you log in.'
+                : 'The app will not start automatically.';
+        })
+        .catch(function() {
+            document.getElementById('autostart_status').textContent = 'Could not check autostart status.';
+        });
+})();
+
+function toggleAutostart(cb) {
+    var status = document.getElementById('autostart_status');
+    status.textContent = 'Saving...';
+    status.style.color = '#64748b';
+    fetch('/api/autostart', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled: cb.checked})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            status.textContent = 'Error: ' + data.error;
+            status.style.color = '#dc2626';
+            cb.checked = !cb.checked;
+        } else {
+            status.textContent = data.enabled
+                ? 'The app will start automatically when you log in.'
+                : 'The app will not start automatically.';
+            status.style.color = '#16a34a';
+            setTimeout(function() { status.style.color = '#64748b'; }, 2000);
+        }
+    })
+    .catch(function(e) {
+        status.textContent = 'Error: ' + e.message;
+        status.style.color = '#dc2626';
+        cb.checked = !cb.checked;
+    });
+}
+
 function toggleSecret(btn, inputId) {
     var input = document.getElementById(inputId);
     if (input.type === 'password') {
