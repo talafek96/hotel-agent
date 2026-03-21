@@ -121,6 +121,14 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 for cond, item in [
                     (not has_llm, {"label": "AI Provider", "link": "/config", "page": "Config"}),
                     (not has_serpapi, {"label": "SerpAPI", "link": "/config", "page": "Config"}),
+                    (
+                        not has_telegram and not has_email,
+                        {
+                            "label": "Notifications (Telegram / Email)",
+                            "link": "/config",
+                            "page": "Config",
+                        },
+                    ),
                     (not imported, {"label": "Bookings", "link": "/import", "page": "Import"}),
                 ]
                 if cond
@@ -235,8 +243,16 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 save_config(config, config_path)
 
             elif step == 5:
-                # Excel import (optional)
-                if file and file.filename and sheet:
+                if is_skip:
+                    pass  # Skip — advance to done
+                elif not file or not file.filename:
+                    error = "Please select an Excel file to upload, or click 'Skip for now'."
+                    next_step = step
+                elif not sheet.strip():
+                    error = "Please enter the sheet name."
+                    next_step = step
+                else:
+                    # Excel import
                     from ..llm.excel_parser import excel_to_models, parse_excel_with_llm
 
                     suffix = Path(file.filename).suffix
@@ -245,7 +261,9 @@ def create_app(config_path: str | None = None) -> FastAPI:
                         tmp_path = tmp.name
 
                     try:
-                        records = parse_excel_with_llm(config, tmp_path, sheet, table or None)
+                        records = parse_excel_with_llm(
+                            config, tmp_path, sheet.strip(), table.strip() or None
+                        )
                         pairs = excel_to_models(records, config.travelers)
 
                         with get_db() as db:
@@ -266,7 +284,6 @@ def create_app(config_path: str | None = None) -> FastAPI:
                         next_step = step  # Stay on import step on error
                     finally:
                         Path(tmp_path).unlink(missing_ok=True)
-                # If no file uploaded, just advance
 
             elif step == 6:
                 # Done — mark setup complete and redirect to dashboard

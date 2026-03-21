@@ -278,11 +278,17 @@ def _run_tray(server_proc: subprocess.Popen) -> None:  # type: ignore[type-arg]
 
     def quit_app(icon: pystray.Icon, item: pystray.MenuItem) -> None:  # type: ignore[name-defined]
         icon.stop()
-        server_proc.terminate()
+        # On Windows, terminate() only kills the parent (uv.exe), not child processes.
+        # Use kill() which sends SIGKILL on Unix or TerminateProcess on Windows.
+        if sys.platform == "win32":
+            server_proc.kill()
+        else:
+            server_proc.terminate()
         try:
             server_proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             server_proc.kill()
+        sys.exit(0)
 
     icon = pystray.Icon(
         "hotel-price-tracker",
