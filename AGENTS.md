@@ -23,6 +23,7 @@ python -m uv run pytest
 - Wants to switch between LLM providers easily.
 - Commit messages: concise summary line, bullet-point body. No paragraphs. Never mention Devin or Co-Authored-By.
 - New work goes on feature branches: `usr/<github-username>/<branch_name>` (e.g. `usr/tal-afek/pipeline-scheduler`).
+- **NEVER merge a PR without explicit approval or request from the user.** PRs are for review — the user decides when to merge.
 
 ## No AI Credit
 
