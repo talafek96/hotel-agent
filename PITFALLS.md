@@ -23,3 +23,9 @@
 - **Cause**: `os.uname()` is Unix-only; called unconditionally in WSL browser detection
 - **Fix**: Guard with `sys.platform != "win32"` before calling `os.uname()`
 - **Commit**: c6336bc
+
+## Stale Windows process steals port from WSL launcher
+- **Symptom**: Linux dist launcher opens browser to "Internal Server Error" despite server starting correctly
+- **Cause**: A broken Windows .exe was still holding port 8470 invisibly (no tray icon). The WSL launcher's `is_server_running()` detected the port as occupied, skipped starting a new server, and opened the browser to the broken Windows process.
+- **Fix**: Kill stale processes on the port before testing. On Windows: `netstat -ano | findstr :8470` then `taskkill /F /PID <pid>`. On Linux: `lsof -ti :8470 | xargs kill`.
+- **Lesson**: When debugging "Internal Server Error", always check if another process owns the port first.
