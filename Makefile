@@ -115,7 +115,7 @@ dist-ci: ## Build all platforms via GitHub Actions (requires gh CLI)
 	@command -v gh >/dev/null 2>&1 || { echo "Error: gh CLI not found. Install: https://cli.github.com"; exit 1; }
 	@echo "Triggering multi-platform build on GitHub Actions..."
 	@echo "Version: $(VERSION)"
-	@rm -rf dist
+	-rm -rf dist
 	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	gh workflow run release.yml --ref "$$BRANCH"
 	@echo "Waiting for workflow to start..."
