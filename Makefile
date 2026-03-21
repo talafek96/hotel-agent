@@ -1,4 +1,4 @@
-.PHONY: install install-gui lint format typecheck test check build dist clean
+.PHONY: install install-gui lint format typecheck test check build dist dist-all dist-local clean
 
 # ── Development ────────────────────────────────────────
 
@@ -76,3 +76,49 @@ dist: build
 
 clean:
 	rm -rf build/ dist/ *.spec __pycache__
+
+# ── Multi-platform Distribution ───────────────────────
+
+# Build all platforms via GitHub Actions (requires gh CLI + internet)
+# Triggers the release workflow, waits for completion, downloads all zips.
+dist-all:
+	@command -v gh >/dev/null 2>&1 || { echo "Error: gh CLI not found. Install: https://cli.github.com"; exit 1; }
+	@echo "Triggering multi-platform build on GitHub Actions..."
+	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	gh workflow run release.yml --ref "$$BRANCH"
+	@echo "Waiting for workflow to start..."
+	@sleep 10
+	@RUN_ID=$$(gh run list -w release.yml -L 1 --json databaseId -q '.[0].databaseId'); \
+	echo "Run ID: $$RUN_ID — monitoring at:"; \
+	echo "  https://github.com/$$(gh repo view --json nameWithOwner -q .nameWithOwner)/actions/runs/$$RUN_ID"; \
+	echo ""; \
+	gh run watch "$$RUN_ID"; \
+	STATUS=$$(gh run view "$$RUN_ID" --json conclusion -q .conclusion); \
+	if [ "$$STATUS" != "success" ]; then \
+		echo "Error: workflow failed ($$STATUS). Check the link above."; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "Downloading artifacts..."; \
+	mkdir -p dist; \
+	gh run download "$$RUN_ID" -D dist/; \
+	echo ""; \
+	echo "All platform builds downloaded to dist/:";\
+	ls dist/**/*.zip 2>/dev/null || ls dist/*/*.zip 2>/dev/null
+
+# Build Linux variants locally via act + Docker (requires docker/podman)
+# macOS and Windows builds require their native OS — use dist-all for those.
+dist-local:
+	@command -v act >/dev/null 2>&1 || command -v $(HOME)/.cache/act-runner/act >/dev/null 2>&1 || \
+		{ echo "Error: act not found. Install: https://github.com/nektos/act"; exit 1; }
+	@ACT=$$(command -v act 2>/dev/null || echo "$(HOME)/.cache/act-runner/act"); \
+	echo "Building Linux distributions locally via act..."; \
+	echo "(macOS/Windows builds require GitHub Actions — use 'make dist-all')"; \
+	echo ""; \
+	mkdir -p dist; \
+	"$$ACT" -W .github/workflows/release.yml \
+		--artifact-server-path dist/act-artifacts \
+		--matrix os:ubuntu-latest \
+		-j build; \
+	echo ""; \
+	echo "Linux build artifacts saved to dist/act-artifacts/"
