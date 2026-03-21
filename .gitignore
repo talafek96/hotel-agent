@@ -10,9 +10,13 @@ build/
 .pytest_cache/
 .mypy_cache/
 
+# PyInstaller
+*.spec
+
 # Data & secrets
 data/*.db
 data/*.json
+data/.setup_complete
 data/screenshots/
 outputs/
 .env

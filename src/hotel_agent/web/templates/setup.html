@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup — Hotel Price Tracker</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #f1f5f9; color: #1e293b; line-height: 1.6;
+            min-height: 100vh; display: flex; justify-content: center; padding: 2rem;
+        }
+        a { color: #3b82f6; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .setup-container { max-width: 640px; width: 100%; }
+
+        .setup-header { text-align: center; margin-bottom: 2rem; }
+        .setup-header h1 { font-size: 1.75rem; font-weight: 700; color: #1e293b; margin-bottom: .25rem; }
+        .setup-header p { color: #64748b; font-size: .9rem; }
+
+        /* Step indicator */
+        .steps { display: flex; gap: .5rem; justify-content: center; margin-bottom: 2rem; }
+        .step-dot {
+            width: 2.5rem; height: .35rem; border-radius: 9999px; background: #cbd5e1;
+            transition: background .2s;
+        }
+        .step-dot.active { background: #3b82f6; }
+        .step-dot.done { background: #22c55e; }
+
+        .card {
+            background: #fff; border-radius: .75rem; box-shadow: 0 1px 3px rgba(0,0,0,.08);
+            padding: 2rem; margin-bottom: 1.5rem;
+        }
+        .card h2 { font-size: 1.25rem; margin-bottom: .5rem; }
+        .card p.subtitle { color: #64748b; font-size: .875rem; margin-bottom: 1.25rem; }
+
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group label { display: block; font-size: .8125rem; font-weight: 600; color: #374151; margin-bottom: .35rem; }
+        input, select, textarea {
+            width: 100%; padding: .5rem .75rem; font-size: .875rem; border: 1px solid #d1d5db;
+            border-radius: .375rem; background: #fff; color: #1e293b; transition: border-color .15s;
+            font-family: inherit;
+        }
+        input:focus, select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+
+        .btn {
+            display: inline-flex; align-items: center; gap: .375rem;
+            padding: .625rem 1.25rem; font-size: .875rem; font-weight: 500; border: none;
+            border-radius: .375rem; cursor: pointer; transition: background .15s;
+            line-height: 1.4; text-decoration: none;
+        }
+        .btn-primary { background: #3b82f6; color: #fff; }
+        .btn-primary:hover { background: #2563eb; text-decoration: none; }
+        .btn-secondary { background: #e2e8f0; color: #475569; }
+        .btn-secondary:hover { background: #cbd5e1; text-decoration: none; }
+        .btn-success { background: #22c55e; color: #fff; }
+        .btn-success:hover { background: #16a34a; text-decoration: none; }
+
+        .btn-row { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; }
+
+        .help-text { font-size: .8rem; color: #64748b; margin-top: .25rem; }
+        .help-link { font-size: .8rem; margin-top: .25rem; }
+
+        .provider-options { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .provider-option {
+            flex: 1; min-width: 140px; border: 2px solid #e2e8f0; border-radius: .5rem;
+            padding: .75rem; text-align: center; cursor: pointer; transition: border-color .15s;
+        }
+        .provider-option:hover { border-color: #94a3b8; }
+        .provider-option.selected { border-color: #3b82f6; background: #eff6ff; }
+        .provider-option input[type="radio"] { display: none; }
+        .provider-option .provider-name { font-weight: 600; font-size: .9rem; }
+        .provider-option .provider-model { font-size: .75rem; color: #64748b; margin-top: .15rem; }
+
+        .info-box {
+            background: #eff6ff; border: 1px solid #bfdbfe; border-radius: .375rem;
+            padding: 1rem; font-size: .85rem; color: #1e40af; margin-bottom: 1.25rem;
+        }
+        .warning-box {
+            background: #fefce8; border: 1px solid #fde68a; border-radius: .375rem;
+            padding: 1rem; font-size: .85rem; color: #854d0e; margin-bottom: 1.25rem;
+        }
+        .success-box {
+            background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: .375rem;
+            padding: 1rem; color: #166534;
+        }
+        .badge {
+            display: inline-block; font-size: .65rem; font-weight: 600; padding: .15em .5em;
+            border-radius: 9999px; text-transform: uppercase; vertical-align: middle; margin-left: .5rem;
+        }
+        .badge-green { background: #dcfce7; color: #166534; }
+
+        .skip-link { font-size: .8rem; color: #94a3b8; }
+        .skip-link:hover { color: #64748b; }
+
+        .checklist { list-style: none; }
+        .checklist li { padding: .5rem 0; font-size: .9rem; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: .5rem; }
+        .checklist li:last-child { border-bottom: none; }
+        .check-icon { color: #22c55e; font-size: 1.1rem; }
+        .pending-icon { color: #94a3b8; font-size: 1.1rem; }
+
+        .alert-box {
+            padding: 1rem 1.25rem; border-radius: .375rem; font-size: .875rem;
+            margin-bottom: 1rem; border-left: 4px solid;
+        }
+        .alert-error { background: #fef2f2; border-color: #ef4444; color: #991b1b; }
+    </style>
+</head>
+<body>
+
+<div class="setup-container">
+    <div class="setup-header">
+        <h1>Hotel Price Tracker</h1>
+        <p>Setup Wizard</p>
+    </div>
+
+    <!-- Step indicator -->
+    <div class="steps">
+        {% for i in range(1, 7) %}
+        <div class="step-dot {% if i < step %}done{% elif i == step %}active{% endif %}"></div>
+        {% endfor %}
+    </div>
+
+    {% if error %}
+    <div class="alert-box alert-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" {% if step == 5 %}enctype="multipart/form-data"{% endif %}>
+    <input type="hidden" name="step" value="{{ step }}">
+
+    <!-- ── Step 1: Welcome ── -->
+    {% if step == 1 %}
+    <div class="card">
+        <h2>Welcome!</h2>
+        <p class="subtitle">Let's get your hotel price tracker up and running. This will only take a few minutes.</p>
+
+        <p style="margin-bottom:1rem;">This tool helps you:</p>
+        <ul style="margin-left:1.5rem; margin-bottom:1.5rem; font-size:.9rem;">
+            <li style="margin-bottom:.5rem;"><strong>Import</strong> your hotel bookings from an Excel file</li>
+            <li style="margin-bottom:.5rem;"><strong>Track</strong> prices across Booking.com, Agoda, Expedia, and more</li>
+            <li style="margin-bottom:.5rem;"><strong>Alert</strong> you when prices drop or better deals appear</li>
+        </ul>
+
+        <p style="font-size:.9rem; color:#475569;">
+            To do this, we need two API keys (both have free tiers). The next steps will guide you through getting them.
+        </p>
+    </div>
+
+    <div class="btn-row">
+        <span></span>
+        <button type="submit" class="btn btn-primary">Get Started</button>
+    </div>
+
+    <!-- ── Step 2: LLM API Key ── -->
+    {% elif step == 2 %}
+    <div class="card">
+        <h2>AI Provider</h2>
+        <p class="subtitle">
+            We use AI to parse your Excel files and verify hotel matches.
+            Pick a provider and enter your API key.
+        </p>
+
+        <div class="provider-options">
+            <label class="provider-option {% if llm_provider == 'openai' %}selected{% endif %}" onclick="selectProvider(this, 'openai')">
+                <input type="radio" name="llm_provider" value="openai" {% if llm_provider == 'openai' %}checked{% endif %}>
+                <div class="provider-name">OpenAI</div>
+                <div class="provider-model">gpt-4o-mini</div>
+            </label>
+            <label class="provider-option {% if llm_provider == 'gemini' %}selected{% endif %}" onclick="selectProvider(this, 'gemini')">
+                <input type="radio" name="llm_provider" value="gemini" {% if llm_provider == 'gemini' %}checked{% endif %}>
+                <div class="provider-name">Google Gemini</div>
+                <div class="provider-model">gemini-2.0-flash</div>
+            </label>
+            <label class="provider-option {% if llm_provider == 'anthropic' %}selected{% endif %}" onclick="selectProvider(this, 'anthropic')">
+                <input type="radio" name="llm_provider" value="anthropic" {% if llm_provider == 'anthropic' %}checked{% endif %}>
+                <div class="provider-name">Anthropic</div>
+                <div class="provider-model">claude-sonnet-4-20250514</div>
+            </label>
+        </div>
+
+        <div id="openai-fields" class="provider-fields" style="display:{% if llm_provider == 'openai' %}block{% else %}none{% endif %}">
+            <div class="form-group">
+                <label for="openai_key">OpenAI API Key</label>
+                <input type="password" id="openai_key" name="openai_api_key" value="{{ secrets.get('OPENAI_API_KEY', '') }}" placeholder="sk-...">
+                <p class="help-link">
+                    <a href="https://platform.openai.com/api-keys" target="_blank">Get your key at platform.openai.com</a>
+                    — sign up, go to API Keys, click "Create new secret key"
+                </p>
+            </div>
+            <div class="form-group">
+                <label for="openai_model">Model</label>
+                <input type="text" id="openai_model" name="openai_model" value="{{ llm_model if llm_provider == 'openai' else 'gpt-4o-mini' }}" placeholder="gpt-4o-mini">
+                <p class="help-text">Default: gpt-4o-mini (fast and affordable)</p>
+            </div>
+        </div>
+
+        <div id="gemini-fields" class="provider-fields" style="display:{% if llm_provider == 'gemini' %}block{% else %}none{% endif %}">
+            <div class="form-group">
+                <label for="gemini_key">Google Gemini API Key</label>
+                <input type="password" id="gemini_key" name="gemini_api_key" value="{{ secrets.get('GEMINI_API_KEY', '') }}" placeholder="AI...">
+                <p class="help-link">
+                    <a href="https://aistudio.google.com/apikey" target="_blank">Get your key at aistudio.google.com</a>
+                    — sign in with Google, click "Create API key"
+                </p>
+            </div>
+            <div class="form-group">
+                <label for="gemini_model">Model</label>
+                <input type="text" id="gemini_model" name="gemini_model" value="{{ llm_model if llm_provider == 'gemini' else 'gemini/gemini-2.0-flash' }}" placeholder="gemini/gemini-2.0-flash">
+                <p class="help-text">Default: gemini-2.0-flash (fast and free tier available)</p>
+            </div>
+        </div>
+
+        <div id="anthropic-fields" class="provider-fields" style="display:{% if llm_provider == 'anthropic' %}block{% else %}none{% endif %}">
+            <div class="form-group">
+                <label for="anthropic_key">Anthropic API Key</label>
+                <input type="password" id="anthropic_key" name="anthropic_api_key" value="{{ secrets.get('ANTHROPIC_API_KEY', '') }}" placeholder="sk-ant-...">
+                <p class="help-link">
+                    <a href="https://console.anthropic.com/settings/keys" target="_blank">Get your key at console.anthropic.com</a>
+                    — sign up, go to API Keys, click "Create Key"
+                </p>
+            </div>
+            <div class="form-group">
+                <label for="anthropic_model">Model</label>
+                <input type="text" id="anthropic_model" name="anthropic_model" value="{{ llm_model if llm_provider == 'anthropic' else 'claude-sonnet-4-20250514' }}" placeholder="claude-sonnet-4-20250514">
+                <p class="help-text">Default: claude-sonnet-4-20250514</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <a href="/setup?step=1" class="btn btn-secondary">Back</a>
+        <button type="submit" class="btn btn-primary">Next</button>
+    </div>
+
+    <!-- ── Step 3: SerpAPI Key ── -->
+    {% elif step == 3 %}
+    <div class="card">
+        <h2>Hotel Price Data</h2>
+        <p class="subtitle">
+            We use SerpAPI to search Google Hotels and get prices from Booking.com, Agoda, Expedia, and more — all in a single query.
+        </p>
+
+        <div class="info-box">
+            SerpAPI has a <strong>free tier with 250 searches/month</strong> — more than enough
+            for tracking 10-20 hotels daily. No credit card required to sign up.
+        </div>
+
+        <div class="form-group">
+            <label for="serpapi_key">SerpAPI Key</label>
+            <input type="password" id="serpapi_key" name="serpapi_key" value="{{ secrets.get('SERPAPI_KEY', '') }}" placeholder="Your SerpAPI key">
+            <p class="help-link">
+                <a href="https://serpapi.com/manage-api-key" target="_blank">Get your key at serpapi.com</a>
+                — sign up, your key is on the dashboard
+            </p>
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <a href="/setup?step=2" class="btn btn-secondary">Back</a>
+        <button type="submit" class="btn btn-primary">Next</button>
+    </div>
+
+    <!-- ── Step 4: Notifications ── -->
+    {% elif step == 4 %}
+    <div class="card">
+        <h2>Notifications (Optional)</h2>
+        <p class="subtitle">
+            Get alerts when prices drop. You can skip this and set it up later from the Settings page.
+        </p>
+
+        <h3 style="font-size:.95rem; margin-bottom:.75rem; margin-top:1rem;">Telegram</h3>
+        <div class="form-group">
+            <label for="telegram_bot_token">Bot Token</label>
+            <input type="password" id="telegram_bot_token" name="telegram_bot_token" value="{{ secrets.get('TELEGRAM_BOT_TOKEN', '') }}" placeholder="7123456789:AAH...">
+            <p class="help-link">
+                <a href="https://t.me/BotFather" target="_blank">Create a bot via @BotFather on Telegram</a>
+                — send /newbot and follow the prompts
+            </p>
+        </div>
+        <div class="form-group">
+            <label for="telegram_chat_id">Chat ID</label>
+            <input type="text" id="telegram_chat_id" name="telegram_chat_id" value="{{ secrets.get('TELEGRAM_CHAT_ID', '') }}" placeholder="123456789">
+            <p class="help-text">Send a message to your bot, then visit
+                <a href="https://api.telegram.org/bot{TOKEN}/getUpdates" target="_blank">api.telegram.org/bot{TOKEN}/getUpdates</a>
+                to find your chat ID.</p>
+        </div>
+
+        <h3 style="font-size:.95rem; margin-bottom:.75rem; margin-top:1.5rem; padding-top:1rem; border-top:1px solid #e2e8f0;">Email</h3>
+        <div class="form-group">
+            <label for="gmail_user">Gmail Address</label>
+            <input type="email" id="gmail_user" name="gmail_user" value="{{ secrets.get('GMAIL_USER', '') }}" placeholder="you@gmail.com">
+        </div>
+        <div class="form-group">
+            <label for="gmail_app_password">Gmail App Password</label>
+            <input type="password" id="gmail_app_password" name="gmail_app_password" value="{{ secrets.get('GMAIL_APP_PASSWORD', '') }}" placeholder="abcd efgh ijkl mnop">
+            <p class="help-link">
+                <a href="https://myaccount.google.com/apppasswords" target="_blank">Generate an App Password</a>
+                — requires 2FA enabled on your Google account
+            </p>
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <a href="/setup?step=3" class="btn btn-secondary">Back</a>
+        <div style="display:flex; gap:.75rem;">
+            <a href="/setup?step=5" class="skip-link" style="align-self:center;">Skip for now</a>
+            <button type="submit" class="btn btn-primary">Next</button>
+        </div>
+    </div>
+
+    <!-- ── Step 5: Excel Import ── -->
+    {% elif step == 5 %}
+    <div class="card">
+        <h2>Import Your Bookings</h2>
+        <p class="subtitle">
+            Upload an Excel file with your hotel bookings. You can also do this later from the Import page.
+        </p>
+
+        <div class="info-box">
+            <strong>AI-powered parsing</strong> — Your Excel doesn't need exact column names. The AI will do its best
+            to recognize your data. For best results, include columns that resemble:
+            <strong>Hotel Name, City, Check-in Date, Check-out Date, Price, Currency, Platform</strong> (e.g., Booking.com).
+        </div>
+
+        <div class="warning-box">
+            <strong>After importing</strong>, go to the <strong>Bookings</strong> tab to review the parsed data.
+            The AI parsing is smart but not perfect — you may need to correct some fields like dates, prices, or
+            room types that were misread.
+        </div>
+
+        <div class="form-group">
+            <label for="file">Excel File (.xlsx)</label>
+            <input type="file" id="file" name="file" accept=".xlsx,.xls">
+        </div>
+        <div class="form-group">
+            <label for="sheet">Sheet Name</label>
+            <input type="text" id="sheet" name="sheet" placeholder="e.g. Hotels, Sheet1">
+        </div>
+        <div class="form-group">
+            <label for="table">Table Name (optional)</label>
+            <input type="text" id="table" name="table" placeholder="e.g. BookingsTable (leave empty if none)">
+        </div>
+
+        {% if import_result %}
+            {% if import_result.success %}
+            <div class="success-box">{{ import_result.message }}</div>
+            {% else %}
+            <div class="alert-box alert-error">Import failed: {{ import_result.message }}</div>
+            {% endif %}
+        {% endif %}
+    </div>
+
+    <div class="btn-row">
+        <a href="/setup?step=4" class="btn btn-secondary">Back</a>
+        <div style="display:flex; gap:.75rem;">
+            <a href="/setup?step=6&skip_import=1" class="skip-link" style="align-self:center;">Skip for now</a>
+            <button type="submit" class="btn btn-primary">Import &amp; Continue</button>
+        </div>
+    </div>
+
+    <!-- ── Step 6: Done ── -->
+    {% elif step == 6 %}
+    <div class="card">
+        <h2>You're All Set!</h2>
+        <p class="subtitle">Your Hotel Price Tracker is configured and ready to go.</p>
+
+        <ul class="checklist">
+            <li>
+                {% if configured.llm %}<span class="check-icon">&#10003;</span>{% else %}<span class="pending-icon">&#9711;</span>{% endif %}
+                AI Provider: <strong>{{ configured.llm_detail or "not configured" }}</strong>
+            </li>
+            <li>
+                {% if configured.serpapi %}<span class="check-icon">&#10003;</span>{% else %}<span class="pending-icon">&#9711;</span>{% endif %}
+                SerpAPI: <strong>{{ "configured" if configured.serpapi else "not configured" }}</strong>
+            </li>
+            <li>
+                {% if configured.telegram %}<span class="check-icon">&#10003;</span>{% else %}<span class="pending-icon">&#9711;</span>{% endif %}
+                Telegram: <strong>{{ "configured" if configured.telegram else "not configured" }}</strong>
+            </li>
+            <li>
+                {% if configured.email %}<span class="check-icon">&#10003;</span>{% else %}<span class="pending-icon">&#9711;</span>{% endif %}
+                Email: <strong>{{ "configured" if configured.email else "not configured" }}</strong>
+            </li>
+            <li>
+                {% if configured.imported %}<span class="check-icon">&#10003;</span>{% else %}<span class="pending-icon">&#9711;</span>{% endif %}
+                Bookings: <strong>{{ configured.import_detail or "none imported yet" }}</strong>
+            </li>
+        </ul>
+    </div>
+
+    {% if configured.imported %}
+    <div class="info-box">
+        <strong>Next step:</strong> Head to the <a href="/bookings">Bookings</a> tab to review your imported data.
+        Check that dates, prices, and hotel names look correct. The AI does its best, but some fields may need manual corrections.
+    </div>
+    {% else %}
+    <div class="info-box">
+        <strong>Next step:</strong> Go to the <a href="/import">Import</a> page to upload your hotel bookings Excel file.
+    </div>
+    {% endif %}
+
+    <div class="btn-row">
+        <a href="/setup?step=5" class="btn btn-secondary">Back</a>
+        <button type="submit" class="btn btn-success">Go to Dashboard</button>
+    </div>
+
+    {% endif %}
+    </form>
+</div>
+
+<script>
+function selectProvider(el, provider) {
+    document.querySelectorAll('.provider-option').forEach(function(o) {
+        o.classList.remove('selected');
+    });
+    el.classList.add('selected');
+    document.querySelectorAll('.provider-fields').forEach(function(f) {
+        f.style.display = 'none';
+    });
+    var fields = document.getElementById(provider + '-fields');
+    if (fields) fields.style.display = 'block';
+}
+</script>
+
+</body>
+</html>

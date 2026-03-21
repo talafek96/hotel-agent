@@ -18,6 +18,12 @@ dependencies = [
     "pydantic-settings>=2.9.0",
 ]
 
+[project.optional-dependencies]
+gui = [
+    "pystray>=0.19.0",
+    "Pillow>=10.0.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
@@ -27,6 +33,7 @@ dev = [
     "types-PyYAML>=6.0",
     "types-requests>=2.32",
     "types-openpyxl>=3.1",
+    "pyinstaller>=6.0",
 ]
 
 [build-system]
@@ -41,6 +48,7 @@ package = true
 
 [project.scripts]
 hotel-agent = "hotel_agent.cli:app"
+hotel-agent-gui = "hotel_agent.launcher:main"
 
 [tool.ruff]
 target-version = "py313"
