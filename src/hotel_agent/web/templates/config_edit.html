@@ -190,19 +190,33 @@
         Saved to <code>.env</code>. Values are hidden by default.
     </p>
     {% set secrets = [
-        ("OpenAI API Key", config.openai_api_key.get_secret_value(), "secret_openai_api_key"),
-        ("Gemini API Key", config.gemini_api_key.get_secret_value(), "secret_gemini_api_key"),
-        ("Anthropic API Key", config.anthropic_api_key.get_secret_value(), "secret_anthropic_api_key"),
-        ("SerpAPI Key", config.serpapi_key.get_secret_value(), "secret_serpapi_key"),
-        ("Telegram Bot Token", config.telegram_bot_token.get_secret_value(), "secret_telegram_bot_token"),
-        ("Telegram Chat ID", config.telegram_chat_id.get_secret_value(), "secret_telegram_chat_id"),
-        ("Gmail User", config.gmail_user.get_secret_value(), "secret_gmail_user"),
-        ("Gmail App Password", config.gmail_app_password.get_secret_value(), "secret_gmail_app_password"),
+        ("OpenAI API Key", config.openai_api_key.get_secret_value(), "secret_openai_api_key",
+         "Sign up at <a href='https://platform.openai.com/api-keys' target='_blank'>platform.openai.com</a>, go to API Keys, click \"Create new secret key\"."),
+        ("Gemini API Key", config.gemini_api_key.get_secret_value(), "secret_gemini_api_key",
+         "Sign in at <a href='https://aistudio.google.com/apikey' target='_blank'>aistudio.google.com</a> with Google, click \"Create API key\"."),
+        ("Anthropic API Key", config.anthropic_api_key.get_secret_value(), "secret_anthropic_api_key",
+         "Sign up at <a href='https://console.anthropic.com/settings/keys' target='_blank'>console.anthropic.com</a>, go to API Keys, click \"Create Key\"."),
+        ("SerpAPI Key", config.serpapi_key.get_secret_value(), "secret_serpapi_key",
+         "Sign up at <a href='https://serpapi.com/manage-api-key' target='_blank'>serpapi.com</a>. Free tier: 250 searches/month. Key is on the dashboard."),
+        ("Telegram Bot Token", config.telegram_bot_token.get_secret_value(), "secret_telegram_bot_token",
+         "Open Telegram, message <a href='https://t.me/BotFather' target='_blank'>@BotFather</a>, send /newbot and follow the prompts to get your token."),
+        ("Telegram Chat ID", config.telegram_chat_id.get_secret_value(), "secret_telegram_chat_id",
+         "Send a message to your bot, then visit api.telegram.org/bot{TOKEN}/getUpdates to find your chat ID in the response."),
+        ("Gmail User", config.gmail_user.get_secret_value(), "secret_gmail_user",
+         "Your full Gmail address (e.g. you@gmail.com). Used as the sender for email notifications."),
+        ("Gmail App Password", config.gmail_app_password.get_secret_value(), "secret_gmail_app_password",
+         "Generate at <a href='https://myaccount.google.com/apppasswords' target='_blank'>myaccount.google.com/apppasswords</a>. Requires 2FA enabled on your Google account."),
     ] %}
-    {% for label, value, field_name in secrets %}
+    {% for label, value, field_name, tooltip in secrets %}
     <div class="form-group" style="margin-bottom:.75rem;">
         <label for="{{ field_name }}" style="display:flex; align-items:center; justify-content:space-between;">
-            <span>{{ label }}</span>
+            <span style="display:flex; align-items:center; gap:.35rem;">
+                {{ label }}
+                <span class="info-tooltip-trigger" tabindex="0">
+                    <span class="info-icon">i</span>
+                    <span class="info-tooltip-bubble">{{ tooltip | safe }}</span>
+                </span>
+            </span>
             {% if value %}
             <span class="badge badge-green" style="font-size:.6rem;">SET</span>
             {% else %}
