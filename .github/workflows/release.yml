@@ -48,10 +48,14 @@ jobs:
         id: version
         shell: bash
         run: |
-          # Handle tags like v2026.03.21 and v2026.03.21-1 (patch)
-          # git describe: v2026.03.21-1-3-gabcdef -> 2026.03.21-1+3.gabcdef
-          VER=$(git describe --tags --match 'v*' 2>/dev/null | sed 's/^v//' | sed 's/-\([0-9]*\)-g/+\1.g/' || true)
-          if [ -z "$VER" ]; then VER="0.0.0+$(git rev-parse --short HEAD)"; fi
+          # If triggered by a tag, use the tag directly
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+          else
+            # Dev build: find nearest tag + commit distance
+            VER=$(git describe --tags --match 'v*' --long 2>/dev/null | sed 's/^v//; s/-\([0-9]*\)-g/+\1.g/' || true)
+            if [ -z "$VER" ]; then VER="0.0.0+$(git rev-parse --short HEAD)"; fi
+          fi
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "Version: $VER"
 
