@@ -342,6 +342,7 @@ def _price_info_to_snapshot(
         travelers=travelers,
         room_type=room_type,
         platform=source.lower().replace(" ", "_"),
+        source_display=source,
         price=final_price,
         currency=currency,
         is_cancellable=is_cancellable,

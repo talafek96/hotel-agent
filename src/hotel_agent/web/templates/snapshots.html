@@ -40,7 +40,7 @@
         <tr>
             <td>{{ s.id }}</td>
             <td>{{ item.hotel.name[:25] if item.hotel else "#" ~ s.hotel_id }}</td>
-            <td>{{ platform_badge(s.platform, s.link) }}</td>
+            <td>{{ platform_badge(s.source_display or s.platform, s.link, s.platform) }}</td>
             <td>{{ s.room_type[:30] if s.room_type else "" }}</td>
             <td><strong>{{ "{:,.0f}".format(s.price) }} {{ s.currency }}</strong></td>
             <td>

@@ -82,92 +82,93 @@ def platform_url(platform: str) -> str:
 
 
 # Canonical platform metadata for the config UI checklist.
-# key = normalised slug (matches price_snapshots.platform), value = (display, group).
-KNOWN_PLATFORMS: dict[str, tuple[str, str]] = {
+# key = normalised slug (matches price_snapshots.platform), value = group name.
+# Display names come from SerpAPI (source_display) — this dict only assigns groups.
+KNOWN_PLATFORM_GROUPS: dict[str, str] = {
     # ── Major OTAs ──
-    "booking.com": ("Booking.com", "Major OTAs"),
-    "agoda": ("Agoda", "Major OTAs"),
-    "expedia": ("Expedia", "Major OTAs"),
-    "hotels.com": ("Hotels.com", "Major OTAs"),
-    "trip.com": ("Trip.com", "Major OTAs"),
-    "priceline": ("Priceline", "Major OTAs"),
+    "booking.com": "Major OTAs",
+    "agoda": "Major OTAs",
+    "expedia": "Major OTAs",
+    "hotels.com": "Major OTAs",
+    "trip.com": "Major OTAs",
+    "priceline": "Major OTAs",
     # ── Aggregators & Metasearch ──
-    "trivago": ("Trivago", "Aggregators"),
-    "trivago_deals": ("Trivago DEALS", "Aggregators"),
-    "kayak": ("Kayak", "Aggregators"),
-    "orbitz": ("Orbitz", "Aggregators"),
-    "travelocity": ("Travelocity", "Aggregators"),
-    "hostelworld": ("Hostelworld", "Aggregators"),
-    "vrbo": ("VRBO", "Aggregators"),
-    "tripadvisor": ("TripAdvisor", "Aggregators"),
-    "skyscanner": ("Skyscanner", "Aggregators"),
-    "momondo": ("Momondo", "Aggregators"),
-    "cheaptickets": ("CheapTickets", "Aggregators"),
-    "hotwire": ("Hotwire", "Aggregators"),
-    "wego": ("Wego", "Aggregators"),
-    "snaptravel": ("SnapTravel", "Aggregators"),
-    "hopper": ("Hopper", "Aggregators"),
+    "trivago": "Aggregators",
+    "trivago_deals": "Aggregators",
+    "kayak": "Aggregators",
+    "orbitz": "Aggregators",
+    "travelocity": "Aggregators",
+    "hostelworld": "Aggregators",
+    "vrbo": "Aggregators",
+    "tripadvisor": "Aggregators",
+    "skyscanner": "Aggregators",
+    "momondo": "Aggregators",
+    "cheaptickets": "Aggregators",
+    "hotwire": "Aggregators",
+    "wego": "Aggregators",
+    "snaptravel": "Aggregators",
+    "hopper": "Aggregators",
     # ── Hotel Chains ──
-    "marriott.com": ("Marriott", "Hotel Chains"),
-    "hilton.com": ("Hilton", "Hotel Chains"),
-    "ihg.com": ("IHG", "Hotel Chains"),
-    "hyatt.com": ("Hyatt", "Hotel Chains"),
-    "accor.com": ("Accor", "Hotel Chains"),
-    "wyndham.com": ("Wyndham", "Hotel Chains"),
-    "bestwestern.com": ("Best Western", "Hotel Chains"),
-    "radissonhotels.com": ("Radisson", "Hotel Chains"),
-    "choicehotels.com": ("Choice Hotels", "Hotel Chains"),
-    "nh-hotels.com": ("NH Hotels", "Hotel Chains"),
+    "marriott.com": "Hotel Chains",
+    "hilton.com": "Hotel Chains",
+    "ihg.com": "Hotel Chains",
+    "hyatt.com": "Hotel Chains",
+    "accor.com": "Hotel Chains",
+    "wyndham.com": "Hotel Chains",
+    "bestwestern.com": "Hotel Chains",
+    "radissonhotels.com": "Hotel Chains",
+    "choicehotels.com": "Hotel Chains",
+    "nh-hotels.com": "Hotel Chains",
     # ── Japan ──
-    "rakuten_travel": ("Rakuten Travel", "Japan"),
-    "jalan": ("Jalan", "Japan"),
-    "japanican": ("Japanican", "Japan"),
-    "ikyu.com": ("Ikyu", "Japan"),
-    "rurubu_travel": ("Rurubu Travel", "Japan"),
+    "rakuten_travel": "Japan",
+    "jalan": "Japan",
+    "japanican": "Japan",
+    "ikyu.com": "Japan",
+    "rurubu_travel": "Japan",
     # ── India ──
-    "makemytrip": ("MakeMyTrip", "India"),
-    "goibibo": ("Goibibo", "India"),
-    "yatra": ("Yatra", "India"),
-    "cleartrip": ("Cleartrip", "India"),
-    "easemytrip": ("EaseMyTrip", "India"),
-    "oyo": ("OYO", "India"),
+    "makemytrip": "India",
+    "goibibo": "India",
+    "yatra": "India",
+    "cleartrip": "India",
+    "easemytrip": "India",
+    "oyo": "India",
     # ── China ──
-    "ctrip": ("Ctrip", "China"),
-    "qunar": ("Qunar", "China"),
-    "fliggy": ("Fliggy", "China"),
-    "elong": ("eLong", "China"),
-    "meituan": ("Meituan", "China"),
-    "tongcheng": ("Tongcheng", "China"),
+    "ctrip": "China",
+    "qunar": "China",
+    "fliggy": "China",
+    "elong": "China",
+    "meituan": "China",
+    "tongcheng": "China",
     # ── Southeast Asia ──
-    "traveloka": ("Traveloka", "Southeast Asia"),
-    "pegipegi": ("PegiPegi", "Southeast Asia"),
-    "tiket.com": ("Tiket.com", "Southeast Asia"),
-    "reddoorz": ("RedDoorz", "Southeast Asia"),
-    "zenrooms": ("ZenRooms", "Southeast Asia"),
+    "traveloka": "Southeast Asia",
+    "pegipegi": "Southeast Asia",
+    "tiket.com": "Southeast Asia",
+    "reddoorz": "Southeast Asia",
+    "zenrooms": "Southeast Asia",
     # ── South Korea ──
-    "yanolja": ("Yanolja", "South Korea"),
-    "goodchoice": ("Goodchoice", "South Korea"),
+    "yanolja": "South Korea",
+    "goodchoice": "South Korea",
     # ── Middle East ──
-    "almosafer": ("Almosafer", "Middle East"),
-    "rehlat": ("Rehlat", "Middle East"),
-    "tajawal": ("Tajawal", "Middle East"),
+    "almosafer": "Middle East",
+    "rehlat": "Middle East",
+    "tajawal": "Middle East",
     # ── Europe ──
-    "lastminute.com": ("Lastminute.com", "Europe"),
-    "edreams": ("eDreams", "Europe"),
-    "opodo": ("Opodo", "Europe"),
-    "hrs": ("HRS", "Europe"),
-    "secret_escapes": ("Secret Escapes", "Europe"),
-    "laterooms": ("Laterooms", "Europe"),
+    "lastminute.com": "Europe",
+    "edreams": "Europe",
+    "opodo": "Europe",
+    "hrs": "Europe",
+    "secret_escapes": "Europe",
+    "laterooms": "Europe",
     # ── Latin America ──
-    "despegar": ("Despegar", "Latin America"),
-    "decolar": ("Decolar", "Latin America"),
-    "bestday": ("BestDay", "Latin America"),
+    "despegar": "Latin America",
+    "decolar": "Latin America",
+    "bestday": "Latin America",
     # ── Niche / Other ──
-    "travelup": ("TravelUp", "Niche"),
-    "prestigia": ("Prestigia", "Niche"),
-    "destinia": ("Destinia", "Niche"),
-    "zenhotels": ("ZenHotels", "Niche"),
-    "getaroom": ("Getaroom", "Niche"),
+    "travelup": "Niche",
+    "prestigia": "Niche",
+    "destinia": "Niche",
+    "zenhotels": "Niche",
+    "getaroom": "Niche",
 }
 
 # Ordered group list — global groups first, then regional (collapsed by default in UI).
@@ -192,18 +193,16 @@ PLATFORM_GROUPS_EXPANDED: set[str] = {"Major OTAs", "Aggregators", "Hotel Chains
 
 
 def build_platform_list(
-    seen_platforms: list[str],
+    seen_platforms: list[tuple[str, str]],
 ) -> list[dict[str, str]]:
-    """Return a combined list of known + seen platforms with display name and group.
+    """Build the platform checklist from DB-discovered platforms.
 
-    Each entry: {"slug": "booking.com", "display": "Booking.com", "group": "Major OTAs"}
-    Platforms in *seen_platforms* that aren't in KNOWN_PLATFORMS are added under "Other".
+    *seen_platforms* is a list of ``(slug, display_name)`` tuples returned
+    by ``db.get_seen_platforms()``.  The ``KNOWN_PLATFORM_GROUPS`` dict
+    assigns a group; unknown slugs go to "Other".
     """
-    result: dict[str, dict[str, str]] = {}
-    for slug, (display, group) in KNOWN_PLATFORMS.items():
-        result[slug] = {"slug": slug, "display": display, "group": group}
-    for slug in seen_platforms:
-        if slug not in result:
-            display = slug.replace("_", " ").title()
-            result[slug] = {"slug": slug, "display": display, "group": "Other"}
-    return list(result.values())
+    result: list[dict[str, str]] = []
+    for slug, display in seen_platforms:
+        group = KNOWN_PLATFORM_GROUPS.get(slug, "Other")
+        result.append({"slug": slug, "display": display, "group": group})
+    return result

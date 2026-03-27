@@ -943,13 +943,16 @@ def create_app(config_path: str | None = None) -> FastAPI:
                                 sources_detail.append(
                                     {
                                         "platform": s.platform,
+                                        "display_name": s.source_display or s.platform,
                                         "link": s.link,
                                         "price": s.price,
                                         "currency": s.currency,
                                     }
                                 )
                             source_names = (
-                                sorted({s.platform for s in snapshots}) if snapshots else []
+                                sorted({s.source_display or s.platform for s in snapshots})
+                                if snapshots
+                                else []
                             )
                             scrape_state["results"].append(
                                 {
@@ -1406,8 +1409,9 @@ def create_app(config_path: str | None = None) -> FastAPI:
     @app.get("/config", response_class=HTMLResponse)
     async def config_page(request: Request):
         with get_db() as db:
-            seen = set(db.get_seen_platforms())
-        platforms = build_platform_list(list(seen))
+            seen_pairs = db.get_seen_platforms()
+        platforms = build_platform_list(seen_pairs)
+        seen_slugs = {slug for slug, _ in seen_pairs}
         return templates.TemplateResponse(
             request,
             "config_edit.html",
@@ -1416,7 +1420,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "saved": False,
                 "error": None,
                 "platforms": platforms,
-                "seen_platforms": seen,
+                "seen_platforms": seen_slugs,
                 "platform_groups": PLATFORM_GROUPS,
                 "platform_groups_expanded": PLATFORM_GROUPS_EXPANDED,
             },
@@ -1533,8 +1537,9 @@ def create_app(config_path: str | None = None) -> FastAPI:
             error = str(e)
 
         with get_db() as db:
-            seen = set(db.get_seen_platforms())
-        platforms = build_platform_list(list(seen))
+            seen_pairs = db.get_seen_platforms()
+        platforms = build_platform_list(seen_pairs)
+        seen_slugs = {slug for slug, _ in seen_pairs}
         return templates.TemplateResponse(
             request,
             "config_edit.html",
@@ -1543,7 +1548,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "saved": error is None,
                 "error": error,
                 "platforms": platforms,
-                "seen_platforms": seen,
+                "seen_platforms": seen_slugs,
                 "platform_groups": PLATFORM_GROUPS,
                 "platform_groups_expanded": PLATFORM_GROUPS_EXPANDED,
             },

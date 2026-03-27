@@ -82,7 +82,7 @@
                 {% set diff = c.booking.booked_price - s.price %}
                 {% set pct = (diff / c.booking.booked_price * 100) if c.booking.booked_price > 0 else 0 %}
                 <tr>
-                    <td>{{ platform_badge(s.platform, s.link) }}</td>
+                    <td>{{ platform_badge(s.source_display or s.platform, s.link, s.platform) }}</td>
                     <td><strong>{{ "{:,.0f}".format(s.price) }} {{ s.currency }}</strong></td>
                     <td>
                         {% if diff > 0 %}

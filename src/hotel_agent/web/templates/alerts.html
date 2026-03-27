@@ -62,7 +62,7 @@
         <tbody>
         {% for d in a.details %}
             <tr>
-                <td>{{ platform_badge(d.platform, d.link|default("")) }}</td>
+                <td>{{ platform_badge(d.display_name|default(d.platform), d.link|default(""), d.platform) }}</td>
                 <td>{{ "{:,.0f}".format(d.price) }} {{ d.currency }}</td>
                 <td style="color:#16a34a; font-weight:600;">-{{ "{:.1f}".format(d.percentage_diff) }}%</td>
                 <td>{{ d.room_type or "Standard" }}</td>

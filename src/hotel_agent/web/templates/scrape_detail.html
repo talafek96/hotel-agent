@@ -38,7 +38,7 @@
             <tbody>
                 {% for src in d.sources %}
                 <tr>
-                    <td>{{ platform_badge(src.platform, src.link|default("")) }}</td>
+                    <td>{{ platform_badge(src.display_name|default(src.platform), src.link|default(""), src.platform) }}</td>
                     <td><strong>{{ "{:,.0f}".format(src.price) }} {{ src.currency }}</strong></td>
                 </tr>
                 {% endfor %}

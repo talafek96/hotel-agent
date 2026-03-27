@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS price_snapshots (
     children_ages TEXT DEFAULT '[]',
     room_type TEXT DEFAULT '',
     platform TEXT NOT NULL,
+    source_display TEXT DEFAULT '',
     price REAL NOT NULL,
     currency TEXT NOT NULL,
     is_cancellable INTEGER,
@@ -168,6 +169,10 @@ class Database:
         snap_cols = {row[1] for row in cursor.fetchall()}
         if "link" not in snap_cols:
             self.conn.execute("ALTER TABLE price_snapshots ADD COLUMN link TEXT DEFAULT ''")
+        if "source_display" not in snap_cols:
+            self.conn.execute(
+                "ALTER TABLE price_snapshots ADD COLUMN source_display TEXT DEFAULT ''"
+            )
 
         cursor = self.conn.execute("PRAGMA table_info(scrape_runs)")
         run_cols = {row[1] for row in cursor.fetchall()}
@@ -458,10 +463,10 @@ class Database:
         cur = self.conn.execute(
             """INSERT INTO price_snapshots
                (hotel_id, check_in, check_out, adults, children_ages,
-                room_type, platform, price, currency, is_cancellable,
+                room_type, platform, source_display, price, currency, is_cancellable,
                 cancellation_deadline, breakfast_included, bathroom_type,
                 amenities, link, raw_llm_response, screenshot_path)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 snap.hotel_id,
                 date_to_str(snap.check_in),
@@ -470,6 +475,7 @@ class Database:
                 json.dumps(snap.travelers.children_ages),
                 snap.room_type,
                 snap.platform,
+                snap.source_display,
                 snap.price,
                 snap.currency,
                 int(snap.is_cancellable) if snap.is_cancellable is not None else None,
@@ -536,6 +542,7 @@ class Database:
             ),
             room_type=r["room_type"],
             platform=r["platform"],
+            source_display=r["source_display"] if "source_display" in r else "",
             price=r["price"],
             currency=r["currency"],
             is_cancellable=bool(r["is_cancellable"]) if r["is_cancellable"] is not None else None,
@@ -747,12 +754,20 @@ class Database:
 
     # ── Platforms ─────────────────────────────────────────────
 
-    def get_seen_platforms(self) -> list[str]:
-        """Return distinct platform names that appear in price_snapshots."""
+    def get_seen_platforms(self) -> list[tuple[str, str]]:
+        """Return (slug, display_name) pairs for platforms seen in price_snapshots.
+
+        Uses the most recent source_display for each platform slug.
+        Falls back to the slug itself when source_display is empty (old data).
+        """
         rows = self.conn.execute(
-            "SELECT DISTINCT platform FROM price_snapshots ORDER BY platform"
+            """SELECT platform, source_display
+               FROM price_snapshots
+               WHERE platform != ''
+               GROUP BY platform
+               ORDER BY platform"""
         ).fetchall()
-        return [r[0] for r in rows if r[0]]
+        return [(r[0], r[1] or r[0]) for r in rows]
 
     # ── Stats ───────────────────────────────────────────────
 

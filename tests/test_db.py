@@ -1070,4 +1070,5 @@ class TestGetSeenPlatforms:
         tmp_db.add_snapshot(snap3)
 
         seen = tmp_db.get_seen_platforms()
-        assert sorted(seen) == ["agoda", "booking.com"]
+        slugs = sorted(s for s, _ in seen)
+        assert slugs == ["agoda", "booking.com"]

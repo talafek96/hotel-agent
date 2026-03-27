@@ -227,12 +227,17 @@ def run_pipeline(
                         sources_detail.append(
                             {
                                 "platform": s.platform,
+                                "display_name": s.source_display or s.platform,
                                 "link": s.link,
                                 "price": s.price,
                                 "currency": s.currency,
                             }
                         )
-                    source_names = sorted({s.platform for s in snapshots}) if snapshots else []
+                    source_names = (
+                        sorted({s.source_display or s.platform for s in snapshots})
+                        if snapshots
+                        else []
+                    )
                     scrape_results.append(
                         {
                             "hotel": hotel.name,

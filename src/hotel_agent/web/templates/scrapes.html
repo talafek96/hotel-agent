@@ -48,7 +48,7 @@
                     <td>
                         {% if d.sources is defined and d.sources %}
                             {% for src in d.sources %}
-                            {{ platform_badge(src.platform, src.link|default("")) }}
+                            {{ platform_badge(src.display_name|default(src.platform), src.link|default(""), src.platform) }}
                             {% endfor %}
                         {% else %}
                             <span class="badge badge-blue">{{ d.provider|default("serpapi") }}</span>

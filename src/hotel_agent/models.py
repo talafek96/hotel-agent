@@ -123,6 +123,7 @@ class PriceSnapshot:
     travelers: TravelerComposition = field(default_factory=TravelerComposition)
     room_type: str = ""
     platform: str = ""
+    source_display: str = ""  # original OTA name from SerpAPI (e.g. "Booking.com")
     price: float = 0.0
     currency: str = "JPY"
     is_cancellable: bool | None = None
