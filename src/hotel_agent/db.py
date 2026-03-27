@@ -535,6 +535,8 @@ class Database:
         return [self._row_to_snapshot(r) for r in rows]
 
     def _row_to_snapshot(self, r: sqlite3.Row) -> PriceSnapshot:
+        # sqlite3.Row has no .get(); pre-fetch keys for migration safety
+        row_keys = r.keys()
         return PriceSnapshot(
             id=r["id"],
             hotel_id=r["hotel_id"],
@@ -546,7 +548,7 @@ class Database:
             ),
             room_type=r["room_type"],
             platform=r["platform"],
-            source_display=r.get("source_display", ""),
+            source_display=r["source_display"] if "source_display" in row_keys else "",
             price=r["price"],
             currency=r["currency"],
             is_cancellable=bool(r["is_cancellable"]) if r["is_cancellable"] is not None else None,
