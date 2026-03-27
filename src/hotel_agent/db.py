@@ -546,7 +546,7 @@ class Database:
             ),
             room_type=r["room_type"],
             platform=r["platform"],
-            source_display=r["source_display"] if "source_display" in r else "",
+            source_display=r.get("source_display", ""),
             price=r["price"],
             currency=r["currency"],
             is_cancellable=bool(r["is_cancellable"]) if r["is_cancellable"] is not None else None,
