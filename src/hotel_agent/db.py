@@ -183,6 +183,10 @@ class Database:
         booking_cols = {row[1] for row in cursor.fetchall()}
         if "booking_url" not in booking_cols:
             self.conn.execute("ALTER TABLE bookings ADD COLUMN booking_url TEXT DEFAULT ''")
+        if "dinner_included" not in booking_cols:
+            self.conn.execute(
+                "ALTER TABLE bookings ADD COLUMN dinner_included INTEGER NOT NULL DEFAULT 0"
+            )
 
         cursor = self.conn.execute("PRAGMA table_info(alerts)")
         alert_cols = {row[1] for row in cursor.fetchall()}
