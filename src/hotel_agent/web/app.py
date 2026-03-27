@@ -1382,13 +1382,27 @@ def create_app(config_path: str | None = None) -> FastAPI:
     @app.post("/check", response_class=HTMLResponse)
     async def check_run(request: Request):
         from ..analysis.comparator import run_analysis
+        from ..notifications.email import notify_alerts_email
+        from ..notifications.telegram import notify_alerts
 
         with get_db() as db:
             new_alerts = run_analysis(db, config)
-            alerts = db.get_pending_alerts()
+            pending = db.get_pending_alerts()
 
+            # Send notifications for any pending alerts
+            notify_alerts(config, pending)
+            for a in pending:
+                if a.id and not a.notified_telegram:
+                    db.mark_alert_notified(a.id, "telegram")
+
+            notify_alerts_email(config, pending)
+            for a in pending:
+                if a.id and not a.notified_email:
+                    db.mark_alert_notified(a.id, "email")
+
+            # Build display data from all pending alerts
             alert_data = []
-            for a in alerts:
+            for a in pending:
                 hotel = None
                 booking = None
                 if a.booking_id:
