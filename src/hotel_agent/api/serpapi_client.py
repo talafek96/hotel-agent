@@ -248,23 +248,10 @@ def _parse_first_property(
         if snap:
             result.snapshots.append(snap)
 
-    # If no per-OTA prices, fall back to rate_per_night summary
-    if not result.snapshots:
-        rate = prop.get("rate_per_night", {})
-        lowest = rate.get("extracted_lowest") or rate.get("lowest")
-        if lowest:
-            result.snapshots.append(
-                PriceSnapshot(
-                    hotel_id=hotel.id or 0,
-                    check_in=check_in,
-                    check_out=check_out,
-                    travelers=travelers,
-                    platform="google_hotels",
-                    price=float(lowest),
-                    currency=currency,
-                    scraped_at=now,
-                )
-            )
+    # NOTE: We intentionally do NOT fall back to the property-level
+    # rate_per_night summary.  That value is a per-night display estimate
+    # from Google (not a real OTA price), has no booking link, and was
+    # stored as a total-stay price — producing phantom 70%+ "savings" alerts.
 
     logger.info(
         "Parsed %d snapshots for %s (matched: '%s', token: %s)",
