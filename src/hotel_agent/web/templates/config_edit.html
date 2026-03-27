@@ -198,7 +198,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <div style="display:flex; align-items:center; justify-content:space-between; padding:.4rem .75rem; background:#f8fafc; cursor:pointer; user-select:none;"
              onclick="toggleGroup(this)">
             <div style="display:flex; align-items:center; gap:.5rem;">
-                <span class="group-arrow" style="font-size:.65rem; color:#94a3b8; transition:transform .15s;">{{ '&#9660;' if is_expanded else '&#9654;' }}</span>
+                <span class="group-arrow" style="font-size:.65rem; color:#94a3b8; transition:transform .15s;">{% if is_expanded %}&#9660;{% else %}&#9654;{% endif %}</span>
                 <span style="font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:#475569;">{{ group }}</span>
                 <span style="font-size:.7rem; color:#94a3b8;">({{ group_platforms | length }})</span>
             </div>
