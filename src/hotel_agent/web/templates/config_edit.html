@@ -179,6 +179,10 @@ document.addEventListener('DOMContentLoaded', function() {
     <h2>Platform Filter</h2>
     <p style="font-size:.8rem; color:#64748b; margin-bottom:1rem;">
         Uncheck platforms you don't want alerts from. Prices are still tracked for trends.
+        <span style="display:inline-flex; align-items:center; gap:.25rem; margin-left:.5rem;">
+            <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#22c55e;"></span>
+            <span>= seen in your scrapes</span>
+        </span>
     </p>
     <div style="display:flex; gap:.5rem; margin-bottom:1rem;">
         <button type="button" class="btn btn-small" onclick="toggleAllPlatforms(true)">Select All</button>
@@ -189,20 +193,36 @@ document.addEventListener('DOMContentLoaded', function() {
     {% for group in platform_groups %}
     {% set group_platforms = platforms | selectattr('group', 'equalto', group) | list %}
     {% if group_platforms %}
-    <div style="margin-bottom:.75rem;">
-        <h3 style="font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:#64748b; margin-bottom:.4rem;">{{ group }}</h3>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:.15rem .75rem;">
-            {% for p in group_platforms %}
-            <label style="display:flex; align-items:center; gap:.4rem; font-size:.8125rem; font-weight:400; padding:.2rem 0; cursor:pointer;">
-                <input type="checkbox" name="platform_enabled" value="{{ p.slug }}"
-                       {% if p.slug not in config.alerts.excluded_platforms %}checked{% endif %}
-                       style="width:auto; margin:0; accent-color:#3b82f6;">
-                <span>{{ p.display }}</span>
-                {% if p.slug in seen_platforms %}
-                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#22c55e; flex-shrink:0;" title="Seen in past scrapes"></span>
-                {% endif %}
-            </label>
-            {% endfor %}
+    {% set is_expanded = group in platform_groups_expanded %}
+    <div class="platform-group" style="margin-bottom:.5rem; border:1px solid #e2e8f0; border-radius:.375rem; overflow:hidden;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:.4rem .75rem; background:#f8fafc; cursor:pointer; user-select:none;"
+             onclick="toggleGroup(this)">
+            <div style="display:flex; align-items:center; gap:.5rem;">
+                <span class="group-arrow" style="font-size:.65rem; color:#94a3b8; transition:transform .15s;">{{ '&#9660;' if is_expanded else '&#9654;' }}</span>
+                <span style="font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:#475569;">{{ group }}</span>
+                <span style="font-size:.7rem; color:#94a3b8;">({{ group_platforms | length }})</span>
+            </div>
+            <div style="display:flex; gap:.35rem;" onclick="event.stopPropagation()">
+                <button type="button" class="btn btn-small" style="padding:.15rem .4rem; font-size:.65rem;"
+                        onclick="toggleGroupPlatforms(this, true)">All</button>
+                <button type="button" class="btn btn-small" style="padding:.15rem .4rem; font-size:.65rem;"
+                        onclick="toggleGroupPlatforms(this, false)">None</button>
+            </div>
+        </div>
+        <div class="group-body" style="display:{{ 'block' if is_expanded else 'none' }}; padding:.4rem .75rem .5rem;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:.1rem .75rem;">
+                {% for p in group_platforms %}
+                <label style="display:flex; align-items:center; gap:.4rem; font-size:.8125rem; font-weight:400; padding:.15rem 0; cursor:pointer;">
+                    <input type="checkbox" name="platform_enabled" value="{{ p.slug }}"
+                           {% if p.slug not in config.alerts.excluded_platforms %}checked{% endif %}
+                           style="width:auto; margin:0; accent-color:#3b82f6;">
+                    <span>{{ p.display }}</span>
+                    {% if p.slug in seen_platforms %}
+                    <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#22c55e; flex-shrink:0;" title="Seen in past scrapes"></span>
+                    {% endif %}
+                </label>
+                {% endfor %}
+            </div>
         </div>
     </div>
     {% endif %}
@@ -363,6 +383,25 @@ document.addEventListener('DOMContentLoaded', function() {
 function toggleAllPlatforms(checked) {
     var card = document.getElementById('platform-filter-card');
     card.querySelectorAll('input[name="platform_enabled"]').forEach(function(cb) { cb.checked = checked; });
+}
+
+// Collapse / expand a platform group
+function toggleGroup(header) {
+    var body = header.nextElementSibling;
+    var arrow = header.querySelector('.group-arrow');
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        arrow.innerHTML = '&#9660;';
+    } else {
+        body.style.display = 'none';
+        arrow.innerHTML = '&#9654;';
+    }
+}
+
+// Select All / None within a single group
+function toggleGroupPlatforms(btn, checked) {
+    var group = btn.closest('.platform-group');
+    group.querySelectorAll('input[name="platform_enabled"]').forEach(function(cb) { cb.checked = checked; });
 }
 
 // Load autostart state on page load

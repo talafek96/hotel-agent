@@ -20,7 +20,13 @@ from pydantic import SecretStr
 from ..config import load_config, save_config, save_secrets
 from ..db import Database
 from ..models import Booking, Hotel, TravelerComposition
-from ..utils import PLATFORM_GROUPS, PLATFORM_URLS, build_platform_list, platform_url
+from ..utils import (
+    PLATFORM_GROUPS,
+    PLATFORM_GROUPS_EXPANDED,
+    PLATFORM_URLS,
+    build_platform_list,
+    platform_url,
+)
 
 log = logging.getLogger(__name__)
 
@@ -1412,6 +1418,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "platforms": platforms,
                 "seen_platforms": seen,
                 "platform_groups": PLATFORM_GROUPS,
+                "platform_groups_expanded": PLATFORM_GROUPS_EXPANDED,
             },
         )
 
@@ -1538,6 +1545,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "platforms": platforms,
                 "seen_platforms": seen,
                 "platform_groups": PLATFORM_GROUPS,
+                "platform_groups_expanded": PLATFORM_GROUPS_EXPANDED,
             },
         )
 

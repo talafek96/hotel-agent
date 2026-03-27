@@ -37,3 +37,4 @@ Thumbs.db
 PROMPT.md
 .env_backup
 agent-fetched/
+custom.db

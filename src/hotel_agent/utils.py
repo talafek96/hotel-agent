@@ -84,28 +84,111 @@ def platform_url(platform: str) -> str:
 # Canonical platform metadata for the config UI checklist.
 # key = normalised slug (matches price_snapshots.platform), value = (display, group).
 KNOWN_PLATFORMS: dict[str, tuple[str, str]] = {
+    # ── Major OTAs ──
     "booking.com": ("Booking.com", "Major OTAs"),
     "agoda": ("Agoda", "Major OTAs"),
     "expedia": ("Expedia", "Major OTAs"),
     "hotels.com": ("Hotels.com", "Major OTAs"),
     "trip.com": ("Trip.com", "Major OTAs"),
     "priceline": ("Priceline", "Major OTAs"),
+    # ── Aggregators & Metasearch ──
     "trivago": ("Trivago", "Aggregators"),
+    "trivago_deals": ("Trivago DEALS", "Aggregators"),
     "kayak": ("Kayak", "Aggregators"),
     "orbitz": ("Orbitz", "Aggregators"),
     "travelocity": ("Travelocity", "Aggregators"),
     "hostelworld": ("Hostelworld", "Aggregators"),
     "vrbo": ("VRBO", "Aggregators"),
-    "rakuten_travel": ("Rakuten Travel", "Japan"),
-    "jalan": ("Jalan", "Japan"),
-    "japanican": ("Japanican", "Japan"),
+    "tripadvisor": ("TripAdvisor", "Aggregators"),
+    "skyscanner": ("Skyscanner", "Aggregators"),
+    "momondo": ("Momondo", "Aggregators"),
+    "cheaptickets": ("CheapTickets", "Aggregators"),
+    "hotwire": ("Hotwire", "Aggregators"),
+    "wego": ("Wego", "Aggregators"),
+    "snaptravel": ("SnapTravel", "Aggregators"),
+    "hopper": ("Hopper", "Aggregators"),
+    # ── Hotel Chains ──
     "marriott.com": ("Marriott", "Hotel Chains"),
     "hilton.com": ("Hilton", "Hotel Chains"),
     "ihg.com": ("IHG", "Hotel Chains"),
+    "hyatt.com": ("Hyatt", "Hotel Chains"),
+    "accor.com": ("Accor", "Hotel Chains"),
+    "wyndham.com": ("Wyndham", "Hotel Chains"),
+    "bestwestern.com": ("Best Western", "Hotel Chains"),
+    "radissonhotels.com": ("Radisson", "Hotel Chains"),
+    "choicehotels.com": ("Choice Hotels", "Hotel Chains"),
+    "nh-hotels.com": ("NH Hotels", "Hotel Chains"),
+    # ── Japan ──
+    "rakuten_travel": ("Rakuten Travel", "Japan"),
+    "jalan": ("Jalan", "Japan"),
+    "japanican": ("Japanican", "Japan"),
+    "ikyu.com": ("Ikyu", "Japan"),
+    "rurubu_travel": ("Rurubu Travel", "Japan"),
+    # ── India ──
+    "makemytrip": ("MakeMyTrip", "India"),
+    "goibibo": ("Goibibo", "India"),
+    "yatra": ("Yatra", "India"),
+    "cleartrip": ("Cleartrip", "India"),
+    "easemytrip": ("EaseMyTrip", "India"),
+    "oyo": ("OYO", "India"),
+    # ── China ──
+    "ctrip": ("Ctrip", "China"),
+    "qunar": ("Qunar", "China"),
+    "fliggy": ("Fliggy", "China"),
+    "elong": ("eLong", "China"),
+    "meituan": ("Meituan", "China"),
+    "tongcheng": ("Tongcheng", "China"),
+    # ── Southeast Asia ──
+    "traveloka": ("Traveloka", "Southeast Asia"),
+    "pegipegi": ("PegiPegi", "Southeast Asia"),
+    "tiket.com": ("Tiket.com", "Southeast Asia"),
+    "reddoorz": ("RedDoorz", "Southeast Asia"),
+    "zenrooms": ("ZenRooms", "Southeast Asia"),
+    # ── South Korea ──
+    "yanolja": ("Yanolja", "South Korea"),
+    "goodchoice": ("Goodchoice", "South Korea"),
+    # ── Middle East ──
+    "almosafer": ("Almosafer", "Middle East"),
+    "rehlat": ("Rehlat", "Middle East"),
+    "tajawal": ("Tajawal", "Middle East"),
+    # ── Europe ──
+    "lastminute.com": ("Lastminute.com", "Europe"),
+    "edreams": ("eDreams", "Europe"),
+    "opodo": ("Opodo", "Europe"),
+    "hrs": ("HRS", "Europe"),
+    "secret_escapes": ("Secret Escapes", "Europe"),
+    "laterooms": ("Laterooms", "Europe"),
+    # ── Latin America ──
+    "despegar": ("Despegar", "Latin America"),
+    "decolar": ("Decolar", "Latin America"),
+    "bestday": ("BestDay", "Latin America"),
+    # ── Niche / Other ──
+    "travelup": ("TravelUp", "Niche"),
+    "prestigia": ("Prestigia", "Niche"),
+    "destinia": ("Destinia", "Niche"),
+    "zenhotels": ("ZenHotels", "Niche"),
+    "getaroom": ("Getaroom", "Niche"),
 }
 
-# Ordered group list so the UI renders them in a predictable order.
-PLATFORM_GROUPS: list[str] = ["Major OTAs", "Aggregators", "Japan", "Hotel Chains", "Other"]
+# Ordered group list — global groups first, then regional (collapsed by default in UI).
+PLATFORM_GROUPS: list[str] = [
+    "Major OTAs",
+    "Aggregators",
+    "Hotel Chains",
+    "Japan",
+    "India",
+    "China",
+    "Southeast Asia",
+    "South Korea",
+    "Middle East",
+    "Europe",
+    "Latin America",
+    "Niche",
+    "Other",
+]
+
+# Groups that should be expanded by default in the UI.
+PLATFORM_GROUPS_EXPANDED: set[str] = {"Major OTAs", "Aggregators", "Hotel Chains"}
 
 
 def build_platform_list(
