@@ -96,16 +96,16 @@ KNOWN_PLATFORMS: dict[str, tuple[str, str]] = {
     "travelocity": ("Travelocity", "Aggregators"),
     "hostelworld": ("Hostelworld", "Aggregators"),
     "vrbo": ("VRBO", "Aggregators"),
-    "rakuten_travel": ("Rakuten Travel", "Regional"),
-    "jalan": ("Jalan", "Regional"),
-    "japanican": ("Japanican", "Regional"),
+    "rakuten_travel": ("Rakuten Travel", "Japan"),
+    "jalan": ("Jalan", "Japan"),
+    "japanican": ("Japanican", "Japan"),
     "marriott.com": ("Marriott", "Hotel Chains"),
     "hilton.com": ("Hilton", "Hotel Chains"),
     "ihg.com": ("IHG", "Hotel Chains"),
 }
 
 # Ordered group list so the UI renders them in a predictable order.
-PLATFORM_GROUPS: list[str] = ["Major OTAs", "Aggregators", "Regional", "Hotel Chains", "Other"]
+PLATFORM_GROUPS: list[str] = ["Major OTAs", "Aggregators", "Japan", "Hotel Chains", "Other"]
 
 
 def build_platform_list(
