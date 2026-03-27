@@ -79,3 +79,48 @@ PLATFORM_URLS: dict[str, str] = {
 def platform_url(platform: str) -> str:
     """Return the homepage URL for a booking platform, or empty string if unknown."""
     return PLATFORM_URLS.get(platform.lower().strip(), "")
+
+
+# Canonical platform metadata for the config UI checklist.
+# key = normalised slug (matches price_snapshots.platform), value = (display, group).
+KNOWN_PLATFORMS: dict[str, tuple[str, str]] = {
+    "booking.com": ("Booking.com", "Major OTAs"),
+    "agoda": ("Agoda", "Major OTAs"),
+    "expedia": ("Expedia", "Major OTAs"),
+    "hotels.com": ("Hotels.com", "Major OTAs"),
+    "trip.com": ("Trip.com", "Major OTAs"),
+    "priceline": ("Priceline", "Major OTAs"),
+    "trivago": ("Trivago", "Aggregators"),
+    "kayak": ("Kayak", "Aggregators"),
+    "orbitz": ("Orbitz", "Aggregators"),
+    "travelocity": ("Travelocity", "Aggregators"),
+    "hostelworld": ("Hostelworld", "Aggregators"),
+    "vrbo": ("VRBO", "Aggregators"),
+    "rakuten_travel": ("Rakuten Travel", "Regional"),
+    "jalan": ("Jalan", "Regional"),
+    "japanican": ("Japanican", "Regional"),
+    "marriott.com": ("Marriott", "Hotel Chains"),
+    "hilton.com": ("Hilton", "Hotel Chains"),
+    "ihg.com": ("IHG", "Hotel Chains"),
+}
+
+# Ordered group list so the UI renders them in a predictable order.
+PLATFORM_GROUPS: list[str] = ["Major OTAs", "Aggregators", "Regional", "Hotel Chains", "Other"]
+
+
+def build_platform_list(
+    seen_platforms: list[str],
+) -> list[dict[str, str]]:
+    """Return a combined list of known + seen platforms with display name and group.
+
+    Each entry: {"slug": "booking.com", "display": "Booking.com", "group": "Major OTAs"}
+    Platforms in *seen_platforms* that aren't in KNOWN_PLATFORMS are added under "Other".
+    """
+    result: dict[str, dict[str, str]] = {}
+    for slug, (display, group) in KNOWN_PLATFORMS.items():
+        result[slug] = {"slug": slug, "display": display, "group": group}
+    for slug in seen_platforms:
+        if slug not in result:
+            display = slug.replace("_", " ").title()
+            result[slug] = {"slug": slug, "display": display, "group": "Other"}
+    return list(result.values())

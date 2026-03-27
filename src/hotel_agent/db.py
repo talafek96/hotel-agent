@@ -745,6 +745,15 @@ class Database:
         d["details"] = json.loads(d.get("details") or "[]")
         return d
 
+    # ── Platforms ─────────────────────────────────────────────
+
+    def get_seen_platforms(self) -> list[str]:
+        """Return distinct platform names that appear in price_snapshots."""
+        rows = self.conn.execute(
+            "SELECT DISTINCT platform FROM price_snapshots ORDER BY platform"
+        ).fetchall()
+        return [r[0] for r in rows if r[0]]
+
     # ── Stats ───────────────────────────────────────────────
 
     def get_stats(self) -> dict:

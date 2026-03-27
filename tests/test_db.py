@@ -1028,3 +1028,46 @@ class TestAlertExists:
         tmp_db.add_alert(alert)
         # Different alert_type should not match
         assert tmp_db.alert_exists(booking_id, "upgrade", snap_id) is False
+
+
+class TestGetSeenPlatforms:
+    """Tests for the get_seen_platforms query."""
+
+    def _insert_hotel(self, db):
+        from hotel_agent.models import Hotel
+
+        return db.upsert_hotel(Hotel(name="Test Hotel", city="Tokyo"))
+
+    def test_empty_db_returns_empty(self, tmp_db):
+        assert tmp_db.get_seen_platforms() == []
+
+    def test_returns_distinct_platforms(self, tmp_db, sample_snapshot):
+        hotel_id = self._insert_hotel(tmp_db)
+        sample_snapshot.hotel_id = hotel_id
+        sample_snapshot.platform = "booking.com"
+        tmp_db.add_snapshot(sample_snapshot)
+
+        from hotel_agent.models import PriceSnapshot
+
+        snap2 = PriceSnapshot(
+            hotel_id=hotel_id,
+            check_in=sample_snapshot.check_in,
+            check_out=sample_snapshot.check_out,
+            platform="agoda",
+            price=90000,
+            currency="JPY",
+        )
+        tmp_db.add_snapshot(snap2)
+        # Add duplicate platform
+        snap3 = PriceSnapshot(
+            hotel_id=hotel_id,
+            check_in=sample_snapshot.check_in,
+            check_out=sample_snapshot.check_out,
+            platform="booking.com",
+            price=95000,
+            currency="JPY",
+        )
+        tmp_db.add_snapshot(snap3)
+
+        seen = tmp_db.get_seen_platforms()
+        assert sorted(seen) == ["agoda", "booking.com"]

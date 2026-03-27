@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
             { element: '#currency_base', popover: { title: 'Base Currency', description: 'Your home currency. All price comparisons and alerts will be shown in this currency. Set exchange rates below if your bookings are in other currencies.', side: 'bottom' }},
             { element: '#alert_pd_abs', popover: { title: 'Alert Thresholds', description: 'Control when you get notified. "Min Absolute Drop" is the minimum savings (e.g. $50). "Min Percentage" is the minimum discount (e.g. 5%). Both must be met to trigger an alert.', side: 'left' }},
             { element: '#alert_up_cost', popover: { title: 'Room Upgrade Alerts', description: 'Get alerted when a better room is available for little extra cost. "Max Extra Cost" is the most you\'d pay more (e.g. $30). "Max Extra %" caps the increase (e.g. 10%).', side: 'left' }},
+            { element: '#platform-filter-card', popover: { title: 'Platform Filter', description: 'Choose which booking platforms (OTAs) you want alerts from. All are enabled by default. Uncheck any you don\'t trust or don\'t use. A green dot means the platform appeared in your past scrapes.', side: 'left' }},
             { element: 'input[name="notif_telegram"]', popover: { title: 'Notifications', description: 'Enable Telegram and/or email alerts. You\'ll need to set up the corresponding API keys below. Use "Send Test" buttons to verify your setup works.', side: 'left' }},
             { element: '#autostart_toggle', popover: { title: 'Start on Login', description: 'Enable this to automatically launch the price tracker when you log in to your computer. Works on Windows, macOS, and Linux.', side: 'left' }},
             { element: '.info-tooltip-trigger', popover: { title: 'API Key Help', description: 'Hover or click the (i) icon next to any API key for step-by-step instructions on where to get it. Keys marked "NOT SET" still need to be configured.', side: 'bottom' }},
@@ -174,6 +175,40 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
+<div class="card" id="platform-filter-card">
+    <h2>Platform Filter</h2>
+    <p style="font-size:.8rem; color:#64748b; margin-bottom:1rem;">
+        Uncheck platforms you don't want alerts from. Prices are still tracked for trends.
+    </p>
+    <div style="display:flex; gap:.5rem; margin-bottom:1rem;">
+        <button type="button" class="btn btn-small" onclick="toggleAllPlatforms(true)">Select All</button>
+        <button type="button" class="btn btn-small" onclick="toggleAllPlatforms(false)">Deselect All</button>
+    </div>
+    <input type="hidden" name="platform_all_slugs"
+           value="{{ platforms | map(attribute='slug') | join(',') }}">
+    {% for group in platform_groups %}
+    {% set group_platforms = platforms | selectattr('group', 'equalto', group) | list %}
+    {% if group_platforms %}
+    <div style="margin-bottom:.75rem;">
+        <h3 style="font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:#64748b; margin-bottom:.4rem;">{{ group }}</h3>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:.15rem .75rem;">
+            {% for p in group_platforms %}
+            <label style="display:flex; align-items:center; gap:.4rem; font-size:.8125rem; font-weight:400; padding:.2rem 0; cursor:pointer;">
+                <input type="checkbox" name="platform_enabled" value="{{ p.slug }}"
+                       {% if p.slug not in config.alerts.excluded_platforms %}checked{% endif %}
+                       style="width:auto; margin:0; accent-color:#3b82f6;">
+                <span>{{ p.display }}</span>
+                {% if p.slug in seen_platforms %}
+                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#22c55e; flex-shrink:0;" title="Seen in past scrapes"></span>
+                {% endif %}
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+
 <div class="card">
     <h2>Notifications</h2>
     <div class="form-group">
@@ -324,6 +359,12 @@ document.addEventListener('DOMContentLoaded', function() {
 </form>
 
 <script>
+// Platform filter: Select All / Deselect All
+function toggleAllPlatforms(checked) {
+    var card = document.getElementById('platform-filter-card');
+    card.querySelectorAll('input[name="platform_enabled"]').forEach(function(cb) { cb.checked = checked; });
+}
+
 // Load autostart state on page load
 (function() {
     fetch('/api/autostart')

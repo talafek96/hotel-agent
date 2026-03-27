@@ -20,7 +20,7 @@ from pydantic import SecretStr
 from ..config import load_config, save_config, save_secrets
 from ..db import Database
 from ..models import Booking, Hotel, TravelerComposition
-from ..utils import PLATFORM_URLS, platform_url
+from ..utils import PLATFORM_GROUPS, PLATFORM_URLS, build_platform_list, platform_url
 
 log = logging.getLogger(__name__)
 
@@ -1399,10 +1399,20 @@ def create_app(config_path: str | None = None) -> FastAPI:
     # ── Config Editor ─────────────────────────────
     @app.get("/config", response_class=HTMLResponse)
     async def config_page(request: Request):
+        with get_db() as db:
+            seen = set(db.get_seen_platforms())
+        platforms = build_platform_list(list(seen))
         return templates.TemplateResponse(
             request,
             "config_edit.html",
-            {"config": config, "saved": False, "error": None},
+            {
+                "config": config,
+                "saved": False,
+                "error": None,
+                "platforms": platforms,
+                "seen_platforms": seen,
+                "platform_groups": PLATFORM_GROUPS,
+            },
         )
 
     @app.post("/config", response_class=HTMLResponse)
@@ -1419,6 +1429,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         alert_upgrade_max_extra_cost: float = Form(0),
         alert_upgrade_max_extra_percentage: float = Form(0),
         alert_only_cancellable: str = Form(""),
+        platform_all_slugs: str = Form(""),
         notif_telegram: str = Form(""),
         notif_email_triggered: str = Form(""),
         notif_email_digest: str = Form(""),
@@ -1436,6 +1447,10 @@ def create_app(config_path: str | None = None) -> FastAPI:
         secret_gmail_app_password: str = Form(""),
     ):
         nonlocal config
+
+        # Read multi-value checkbox field for enabled platforms
+        form_data = await request.form()
+        enabled_platforms = form_data.getlist("platform_enabled")
 
         error = None
         try:
@@ -1464,6 +1479,14 @@ def create_app(config_path: str | None = None) -> FastAPI:
             config.alerts.upgrade.max_extra_cost = alert_upgrade_max_extra_cost
             config.alerts.upgrade.max_extra_percentage = alert_upgrade_max_extra_percentage
             config.alerts.only_cancellable = alert_only_cancellable == "1"
+
+            # Platform filter — excluded = all slugs minus enabled checkboxes
+            if platform_all_slugs:
+                all_slugs = [s for s in platform_all_slugs.split(",") if s]
+                enabled_set = set(enabled_platforms)
+                config.alerts.excluded_platforms = [s for s in all_slugs if s not in enabled_set]
+            else:
+                config.alerts.excluded_platforms = []
 
             # Notifications
             config.notifications.telegram.enabled = notif_telegram == "1"
@@ -1502,10 +1525,20 @@ def create_app(config_path: str | None = None) -> FastAPI:
             log.exception("Failed to save config")
             error = str(e)
 
+        with get_db() as db:
+            seen = set(db.get_seen_platforms())
+        platforms = build_platform_list(list(seen))
         return templates.TemplateResponse(
             request,
             "config_edit.html",
-            {"config": config, "saved": error is None, "error": error},
+            {
+                "config": config,
+                "saved": error is None,
+                "error": error,
+                "platforms": platforms,
+                "seen_platforms": seen,
+                "platform_groups": PLATFORM_GROUPS,
+            },
         )
 
     # ── Trends ────────────────────────────────────

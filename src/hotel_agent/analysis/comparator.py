@@ -51,6 +51,10 @@ def compare_booking_to_snapshots(
     upgrade_details: list[dict] = []
 
     for snap in snapshots:
+        # Skip platforms the user excluded in Config → Platform Filter
+        if snap.platform in thresholds.excluded_platforms:
+            continue
+
         # Skip non-cancellable snapshots when only_cancellable is set
         if thresholds.only_cancellable and not snap.is_cancellable:
             continue
