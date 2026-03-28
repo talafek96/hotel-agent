@@ -546,12 +546,14 @@ def check(
     config_path: str = typer.Option("config.yaml", "--config", "-c"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ):
-    """Run price analysis and generate alerts."""
+    """Run price analysis, generate alerts, and send notifications."""
     _setup_logging(verbose)
 
     from .analysis.comparator import run_analysis
     from .config import load_config
     from .db import Database
+    from .notifications.email import notify_alerts_email
+    from .notifications.telegram import notify_alerts
 
     config = load_config(config_path)
     db = Database(config.db_path)
@@ -580,6 +582,19 @@ def check(
             )
 
         console.print(tbl)
+
+    # Send notifications for pending alerts
+    pending = db.get_pending_alerts()
+    tg_sent = notify_alerts(config, pending)
+    for a in pending:
+        if a.id and not a.notified_telegram:
+            db.mark_alert_notified(a.id, "telegram")
+    em_sent = notify_alerts_email(config, pending)
+    for a in pending:
+        if a.id and not a.notified_email:
+            db.mark_alert_notified(a.id, "email")
+    if tg_sent or em_sent:
+        console.print(f"\n[green]Notifications sent: {tg_sent} Telegram, {em_sent} email[/green]")
 
     db.close()
 

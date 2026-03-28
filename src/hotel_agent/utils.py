@@ -79,3 +79,130 @@ PLATFORM_URLS: dict[str, str] = {
 def platform_url(platform: str) -> str:
     """Return the homepage URL for a booking platform, or empty string if unknown."""
     return PLATFORM_URLS.get(platform.lower().strip(), "")
+
+
+# Canonical platform metadata for the config UI checklist.
+# key = normalised slug (matches price_snapshots.platform), value = group name.
+# Display names come from SerpAPI (source_display) — this dict only assigns groups.
+KNOWN_PLATFORM_GROUPS: dict[str, str] = {
+    # ── Major OTAs ──
+    "booking.com": "Major OTAs",
+    "agoda": "Major OTAs",
+    "expedia": "Major OTAs",
+    "hotels.com": "Major OTAs",
+    "trip.com": "Major OTAs",
+    "priceline": "Major OTAs",
+    # ── Aggregators & Metasearch ──
+    "trivago": "Aggregators",
+    "trivago_deals": "Aggregators",
+    "kayak": "Aggregators",
+    "orbitz": "Aggregators",
+    "travelocity": "Aggregators",
+    "hostelworld": "Aggregators",
+    "vrbo": "Aggregators",
+    "tripadvisor": "Aggregators",
+    "skyscanner": "Aggregators",
+    "momondo": "Aggregators",
+    "cheaptickets": "Aggregators",
+    "hotwire": "Aggregators",
+    "wego": "Aggregators",
+    "snaptravel": "Aggregators",
+    "hopper": "Aggregators",
+    # ── Hotel Chains ──
+    "marriott.com": "Hotel Chains",
+    "hilton.com": "Hotel Chains",
+    "ihg.com": "Hotel Chains",
+    "hyatt.com": "Hotel Chains",
+    "accor.com": "Hotel Chains",
+    "wyndham.com": "Hotel Chains",
+    "bestwestern.com": "Hotel Chains",
+    "radissonhotels.com": "Hotel Chains",
+    "choicehotels.com": "Hotel Chains",
+    "nh-hotels.com": "Hotel Chains",
+    # ── Japan ──
+    "rakuten_travel": "Japan",
+    "jalan": "Japan",
+    "japanican": "Japan",
+    "ikyu.com": "Japan",
+    "rurubu_travel": "Japan",
+    # ── India ──
+    "makemytrip": "India",
+    "goibibo": "India",
+    "yatra": "India",
+    "cleartrip": "India",
+    "easemytrip": "India",
+    "oyo": "India",
+    # ── China ──
+    "ctrip": "China",
+    "qunar": "China",
+    "fliggy": "China",
+    "elong": "China",
+    "meituan": "China",
+    "tongcheng": "China",
+    # ── Southeast Asia ──
+    "traveloka": "Southeast Asia",
+    "pegipegi": "Southeast Asia",
+    "tiket.com": "Southeast Asia",
+    "reddoorz": "Southeast Asia",
+    "zenrooms": "Southeast Asia",
+    # ── South Korea ──
+    "yanolja": "South Korea",
+    "goodchoice": "South Korea",
+    # ── Middle East ──
+    "almosafer": "Middle East",
+    "rehlat": "Middle East",
+    "tajawal": "Middle East",
+    # ── Europe ──
+    "lastminute.com": "Europe",
+    "edreams": "Europe",
+    "opodo": "Europe",
+    "hrs": "Europe",
+    "secret_escapes": "Europe",
+    "laterooms": "Europe",
+    # ── Latin America ──
+    "despegar": "Latin America",
+    "decolar": "Latin America",
+    "bestday": "Latin America",
+    # ── Niche / Other ──
+    "travelup": "Niche",
+    "prestigia": "Niche",
+    "destinia": "Niche",
+    "zenhotels": "Niche",
+    "getaroom": "Niche",
+}
+
+# Ordered group list — global groups first, then regional (collapsed by default in UI).
+PLATFORM_GROUPS: list[str] = [
+    "Major OTAs",
+    "Aggregators",
+    "Hotel Chains",
+    "Japan",
+    "India",
+    "China",
+    "Southeast Asia",
+    "South Korea",
+    "Middle East",
+    "Europe",
+    "Latin America",
+    "Niche",
+    "Other",
+]
+
+# Groups that should be expanded by default in the UI.
+PLATFORM_GROUPS_EXPANDED: set[str] = {"Major OTAs", "Aggregators", "Hotel Chains"}
+
+
+def build_platform_list(
+    seen_platforms: list[tuple[str, str]],
+) -> list[dict[str, str]]:
+    """Build the platform checklist from DB-discovered platforms.
+
+    *seen_platforms* is a list of ``(slug, display_name)`` tuples returned
+    by ``db.get_seen_platforms()``.  The ``KNOWN_PLATFORM_GROUPS`` dict
+    assigns a group; unknown slugs go to "Other".
+    """
+    result: list[dict[str, str]] = []
+    for slug, display in seen_platforms:
+        group = KNOWN_PLATFORM_GROUPS.get(slug, "Other")
+        result.append({"slug": slug, "display": display, "group": group})
+    return result

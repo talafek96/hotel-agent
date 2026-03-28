@@ -932,3 +932,40 @@ class TestConsolidatedAlertDetails:
         upgrades = [a for a in alerts if a.alert_type == "upgrade"]
         assert len(price_drops) == 1
         assert len(upgrades) == 1
+
+
+class TestExcludedPlatforms:
+    """Excluded platforms should be skipped when generating alerts."""
+
+    def test_excluded_platform_produces_no_alert(self):
+        booking = _make_booking(booked_price=100000)
+        snap = _make_snapshot(price=80000, platform="trivago")
+        hotel = _make_hotel()
+        config = _make_config()
+        config.alerts.excluded_platforms = ["trivago"]
+
+        alerts = compare_booking_to_snapshots(booking, hotel, [snap], config)
+        assert alerts == []
+
+    def test_non_excluded_platform_still_alerts(self):
+        booking = _make_booking(booked_price=100000)
+        snap_excluded = _make_snapshot(price=80000, platform="trivago")
+        snap_ok = _make_snapshot(price=80000, platform="booking.com")
+        hotel = _make_hotel()
+        config = _make_config()
+        config.alerts.excluded_platforms = ["trivago"]
+
+        alerts = compare_booking_to_snapshots(booking, hotel, [snap_excluded, snap_ok], config)
+        price_drops = [a for a in alerts if a.alert_type == "price_drop"]
+        assert len(price_drops) == 1
+        assert price_drops[0].details[0]["platform"] == "booking.com"
+
+    def test_empty_excluded_list_allows_all(self):
+        booking = _make_booking(booked_price=100000)
+        snap = _make_snapshot(price=80000, platform="trivago")
+        hotel = _make_hotel()
+        config = _make_config()
+        config.alerts.excluded_platforms = []
+
+        alerts = compare_booking_to_snapshots(booking, hotel, [snap], config)
+        assert len(alerts) >= 1

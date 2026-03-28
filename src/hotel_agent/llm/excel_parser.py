@@ -122,20 +122,21 @@ IMPORTANT RULES:
 - Extract hyperlinks/URLs if present — they may be booking confirmation links
 - If a row seems like notes/comments rather than a hotel entry, skip it
 - The data might be in Hebrew, Japanese, or English — handle all languages
+- ALL fields below are OPTIONAL. Fill in what you can find in the data, omit or set to null anything not available. Do NOT fail or complain about missing columns.
 
-Return a JSON object with this exact structure:
+Return a JSON object with this structure (include only fields you can populate):
 {
   "hotels": [
     {
-      "name": "Hotel Name",
+      "name": "Hotel Name (REQUIRED — skip row if no hotel name)",
       "city": "City",
-      "country": "Country (if known, infer from context)",
+      "country": "Country (infer from context if not explicit)",
       "address": "Full address if available",
       "url": "Hotel page URL if found",
-      "booking_url": "Booking confirmation link if found (different from hotel URL)",
+      "booking_url": "Booking confirmation link if found",
       "check_in": "YYYY-MM-DD",
       "check_out": "YYYY-MM-DD",
-      "room_type": "room type if available (e.g. Deluxe Twin, Standard Double)",
+      "room_type": "e.g. Deluxe Twin, Standard Double",
       "price": 12345,
       "currency": "JPY",
       "platform": "Agoda",

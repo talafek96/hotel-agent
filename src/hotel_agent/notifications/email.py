@@ -29,7 +29,7 @@ def _build_html_body(alerts: list[Alert], subject: str) -> str:
                 room = d.get("room_type") or "Standard"
                 pct = d.get("percentage_diff", 0)
                 link = d.get("link", "")
-                platform = d["platform"]
+                platform = d.get("display_name") or d["platform"]
                 if link:
                     platform = f'<a href="{link}" style="color:#2563eb;">{platform}</a>'
                 cancel = " | Free cancel" if d.get("is_cancellable") else ""

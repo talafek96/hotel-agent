@@ -16,6 +16,7 @@ def _snap_detail(snap: PriceSnapshot, price_diff: float, pct_diff: float) -> dic
     return {
         "snapshot_id": snap.id,
         "platform": snap.platform,
+        "display_name": snap.source_display or snap.platform,
         "price": snap.price,
         "currency": snap.currency,
         "room_type": snap.room_type or "",
@@ -51,6 +52,10 @@ def compare_booking_to_snapshots(
     upgrade_details: list[dict] = []
 
     for snap in snapshots:
+        # Skip platforms the user excluded in Config → Platform Filter
+        if snap.platform in thresholds.excluded_platforms:
+            continue
+
         # Skip non-cancellable snapshots when only_cancellable is set
         if thresholds.only_cancellable and not snap.is_cancellable:
             continue
@@ -118,7 +123,7 @@ def compare_booking_to_snapshots(
             extras_str = f" | {extras}" if extras else ""
             room = d["room_type"] or "Standard"
             line = (
-                f"  - {d['platform']}: {d['price']:,.0f} {d['currency']}"
+                f"  - {d['display_name']}: {d['price']:,.0f} {d['currency']}"
                 f" (-{d['percentage_diff']:.1f}%) | {room}{extras_str}"
             )
             if d.get("link"):
@@ -160,7 +165,7 @@ def compare_booking_to_snapshots(
             extra = -d["price_diff"]
             cost_str = f"+{extra:,.0f}" if extra > 0 else f"{extra:,.0f}"
             line = (
-                f"  - {d['platform']}: {room} ({cost_str} {d['currency']})"
+                f"  - {d['display_name']}: {room} ({cost_str} {d['currency']})"
                 f" | {d.get('improvements', '')}"
             )
             if d.get("link"):

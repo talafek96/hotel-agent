@@ -98,7 +98,7 @@ def _build_telegraph_content(alerts: list[Alert]) -> list:
 
             # All vendor deals
             for d in alert.details:
-                platform = d["platform"]
+                platform = d.get("display_name") or d["platform"]
                 link = d.get("link", "")
                 pct = d.get("percentage_diff", 0)
                 room = d.get("room_type") or "Standard"
@@ -209,7 +209,7 @@ def _format_alert_compact(alert: Alert) -> str:
 
     if alert.details:
         d = alert.details[0]
-        platform = d["platform"]
+        platform = d.get("display_name") or d["platform"]
         link = d.get("link", "")
         if link:
             platform = f'<a href="{link}">{platform}</a>'
@@ -245,7 +245,7 @@ def _format_alert_block(alert: Alert) -> str:
 
         # All vendor deals
         for d in alert.details:
-            platform = d["platform"]
+            platform = d.get("display_name") or d["platform"]
             link = d.get("link", "")
             if link:
                 platform = f'<a href="{link}">{platform}</a>'

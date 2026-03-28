@@ -289,8 +289,13 @@ class TestParseFirstProperty:
         )
         assert result.snapshots == []
 
-    def test_rate_per_night_summary_fallback(self):
-        """Property with rate_per_night summary but no per-OTA prices."""
+    def test_rate_per_night_summary_not_used_as_fallback(self):
+        """Property-level rate_per_night must NOT produce a phantom snapshot.
+
+        The property-level rate_per_night is a per-night display estimate from
+        Google — not a real bookable OTA price.  Storing it as a total-stay
+        price caused phantom 70%+ "savings" alerts with no booking link.
+        """
         data = {
             "properties": [
                 {
@@ -309,9 +314,11 @@ class TestParseFirstProperty:
             TravelerComposition(),
             "JPY",
         )
-        assert len(result.snapshots) == 1
-        assert result.snapshots[0].platform == "google_hotels"
-        assert result.snapshots[0].price == 12000.0
+        # No per-OTA prices → no snapshots (previously this created a
+        # phantom "google_hotels" snapshot with the nightly rate as price)
+        assert result.snapshots == []
+        # Property token and name are still extracted for caching
+        assert result.matched_name == "Hotel Gracery Shinjuku"
 
     def test_features_cancellation_breakfast(self):
         data = {

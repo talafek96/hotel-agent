@@ -391,3 +391,21 @@ class TestSaveConfig:
         assert "alerts" in data
         assert "notifications" in data
         assert "database" in data
+
+    def test_excluded_platforms_roundtrip(self, tmp_path):
+        """excluded_platforms should survive save → load."""
+        cfg = AppConfig(_env_file=None)
+        cfg.alerts.excluded_platforms = ["trivago", "kayak"]
+
+        out = tmp_path / "config.yaml"
+        save_config(cfg, out)
+
+        with patch.dict(os.environ, {}, clear=True):
+            loaded = load_config(out)
+
+        assert loaded.alerts.excluded_platforms == ["trivago", "kayak"]
+
+    def test_excluded_platforms_default_empty(self):
+        """Default config has no excluded platforms."""
+        cfg = AppConfig(_env_file=None)
+        assert cfg.alerts.excluded_platforms == []

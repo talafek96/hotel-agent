@@ -12,7 +12,7 @@
     <table>
         <tbody>
             <tr><td><strong>Hotel</strong></td><td>{{ hotel.name if hotel else "Hotel #" ~ snapshot.hotel_id }}{% if hotel and hotel.city %} ({{ hotel.city }}){% endif %}</td></tr>
-            <tr><td><strong>Platform</strong></td><td>{{ platform_badge(snapshot.platform, snapshot.link) }}</td></tr>
+            <tr><td><strong>Platform</strong></td><td>{{ platform_badge(snapshot.source_display or snapshot.platform, snapshot.link, snapshot.platform) }}</td></tr>
             <tr><td><strong>Room Type</strong></td><td>{{ snapshot.room_type }}</td></tr>
             <tr><td><strong>Price</strong></td><td><strong>{{ "{:,.0f}".format(snapshot.price) }} {{ snapshot.currency }}</strong></td></tr>
             {% if snapshot.check_in and snapshot.check_out %}

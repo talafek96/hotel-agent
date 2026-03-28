@@ -20,7 +20,13 @@ from pydantic import SecretStr
 from ..config import load_config, save_config, save_secrets
 from ..db import Database
 from ..models import Booking, Hotel, TravelerComposition
-from ..utils import PLATFORM_URLS, platform_url
+from ..utils import (
+    PLATFORM_GROUPS,
+    PLATFORM_GROUPS_EXPANDED,
+    PLATFORM_URLS,
+    build_platform_list,
+    platform_url,
+)
 
 log = logging.getLogger(__name__)
 
@@ -937,13 +943,16 @@ def create_app(config_path: str | None = None) -> FastAPI:
                                 sources_detail.append(
                                     {
                                         "platform": s.platform,
+                                        "display_name": s.source_display or s.platform,
                                         "link": s.link,
                                         "price": s.price,
                                         "currency": s.currency,
                                     }
                                 )
                             source_names = (
-                                sorted({s.platform for s in snapshots}) if snapshots else []
+                                sorted({s.source_display or s.platform for s in snapshots})
+                                if snapshots
+                                else []
                             )
                             scrape_state["results"].append(
                                 {
@@ -1373,13 +1382,27 @@ def create_app(config_path: str | None = None) -> FastAPI:
     @app.post("/check", response_class=HTMLResponse)
     async def check_run(request: Request):
         from ..analysis.comparator import run_analysis
+        from ..notifications.email import notify_alerts_email
+        from ..notifications.telegram import notify_alerts
 
         with get_db() as db:
             new_alerts = run_analysis(db, config)
-            alerts = db.get_pending_alerts()
+            pending = db.get_pending_alerts()
 
+            # Send notifications for any pending alerts
+            notify_alerts(config, pending)
+            for a in pending:
+                if a.id and not a.notified_telegram:
+                    db.mark_alert_notified(a.id, "telegram")
+
+            notify_alerts_email(config, pending)
+            for a in pending:
+                if a.id and not a.notified_email:
+                    db.mark_alert_notified(a.id, "email")
+
+            # Build display data from all pending alerts
             alert_data = []
-            for a in alerts:
+            for a in pending:
                 hotel = None
                 booking = None
                 if a.booking_id:
@@ -1399,10 +1422,22 @@ def create_app(config_path: str | None = None) -> FastAPI:
     # ── Config Editor ─────────────────────────────
     @app.get("/config", response_class=HTMLResponse)
     async def config_page(request: Request):
+        with get_db() as db:
+            seen_pairs = db.get_seen_platforms()
+        platforms = build_platform_list(seen_pairs)
+        seen_slugs = {slug for slug, _ in seen_pairs}
         return templates.TemplateResponse(
             request,
             "config_edit.html",
-            {"config": config, "saved": False, "error": None},
+            {
+                "config": config,
+                "saved": False,
+                "error": None,
+                "platforms": platforms,
+                "seen_platforms": seen_slugs,
+                "platform_groups": PLATFORM_GROUPS,
+                "platform_groups_expanded": PLATFORM_GROUPS_EXPANDED,
+            },
         )
 
     @app.post("/config", response_class=HTMLResponse)
@@ -1419,6 +1454,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         alert_upgrade_max_extra_cost: float = Form(0),
         alert_upgrade_max_extra_percentage: float = Form(0),
         alert_only_cancellable: str = Form(""),
+        platform_all_slugs: str = Form(""),
         notif_telegram: str = Form(""),
         notif_email_triggered: str = Form(""),
         notif_email_digest: str = Form(""),
@@ -1436,6 +1472,10 @@ def create_app(config_path: str | None = None) -> FastAPI:
         secret_gmail_app_password: str = Form(""),
     ):
         nonlocal config
+
+        # Read multi-value checkbox field for enabled platforms
+        form_data = await request.form()
+        enabled_platforms = form_data.getlist("platform_enabled")
 
         error = None
         try:
@@ -1464,6 +1504,14 @@ def create_app(config_path: str | None = None) -> FastAPI:
             config.alerts.upgrade.max_extra_cost = alert_upgrade_max_extra_cost
             config.alerts.upgrade.max_extra_percentage = alert_upgrade_max_extra_percentage
             config.alerts.only_cancellable = alert_only_cancellable == "1"
+
+            # Platform filter — excluded = all slugs minus enabled checkboxes
+            if platform_all_slugs:
+                all_slugs = [s for s in platform_all_slugs.split(",") if s]
+                enabled_set = set(enabled_platforms)
+                config.alerts.excluded_platforms = [s for s in all_slugs if s not in enabled_set]
+            else:
+                config.alerts.excluded_platforms = []
 
             # Notifications
             config.notifications.telegram.enabled = notif_telegram == "1"
@@ -1502,10 +1550,22 @@ def create_app(config_path: str | None = None) -> FastAPI:
             log.exception("Failed to save config")
             error = str(e)
 
+        with get_db() as db:
+            seen_pairs = db.get_seen_platforms()
+        platforms = build_platform_list(seen_pairs)
+        seen_slugs = {slug for slug, _ in seen_pairs}
         return templates.TemplateResponse(
             request,
             "config_edit.html",
-            {"config": config, "saved": error is None, "error": error},
+            {
+                "config": config,
+                "saved": error is None,
+                "error": error,
+                "platforms": platforms,
+                "seen_platforms": seen_slugs,
+                "platform_groups": PLATFORM_GROUPS,
+                "platform_groups_expanded": PLATFORM_GROUPS_EXPANDED,
+            },
         )
 
     # ── Trends ────────────────────────────────────

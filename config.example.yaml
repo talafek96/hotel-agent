@@ -34,6 +34,7 @@ alerts:
     max_extra_cost: 50     # Max extra cost for an upgrade alert
     max_extra_percentage: 10
   only_cancellable: false  # Only alert about cancellable rooms
+  # excluded_platforms: ["trivago", "kayak"]  # Uncheck in Config UI to exclude
 
 # Notifications
 notifications:

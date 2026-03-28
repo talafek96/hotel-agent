@@ -74,6 +74,7 @@ class AlertThresholds(BaseModel):
     price_drop: PriceDropThresholds = PriceDropThresholds()
     upgrade: UpgradeThresholds = UpgradeThresholds()
     only_cancellable: bool = False
+    excluded_platforms: list[str] = []  # platforms unchecked in the UI
 
 
 class TelegramNotifConfig(BaseModel):

@@ -1,13 +1,16 @@
 {# Render a platform name as a clickable badge linking to the booking site.
    If the snapshot has a direct booking link, that takes priority.
-   Otherwise falls back to the platform homepage.
-   If neither is available, renders plain text. #}
-{% macro platform_badge(name, link="") %}
-{%- set url = link if link else platform_url(name) -%}
+   Otherwise falls back to the platform homepage (looked up by slug).
+   If neither is available, renders plain text.
+   display_name: human-readable name from SerpAPI (e.g. "Booking.com")
+   slug: normalised platform slug for URL lookup (e.g. "booking.com")
+   link: direct booking URL from the snapshot #}
+{% macro platform_badge(display_name, link="", slug="") %}
+{%- set url = link if link else platform_url(slug if slug else display_name) -%}
 {%- if url -%}
 <a href="{{ url }}" target="_blank" rel="noopener" style="text-decoration:none;">
-    <span class="badge badge-blue">{{ name }}</span></a>
+    <span class="badge badge-blue">{{ display_name }}</span></a>
 {%- else -%}
-<span class="badge badge-blue">{{ name }}</span>
+<span class="badge badge-blue">{{ display_name }}</span>
 {%- endif -%}
 {% endmacro %}
