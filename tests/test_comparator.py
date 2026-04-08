@@ -791,6 +791,92 @@ class TestRunAnalysis:
         alerts = run_analysis(tmp_db, config)
         assert alerts == []
 
+    def test_run_analysis_multi_currency_bookings(self, tmp_db, config):
+        """Bookings in different currencies should all be analyzed correctly."""
+        config.currency.base = "ILS"
+        config.currency.rates = {
+            "JPY_to_ILS": 0.0196008,
+            "USD_to_ILS": 3.0912,
+            "EUR_to_ILS": 3.35,
+        }
+
+        # Japan hotel (JPY)
+        h_jp = tmp_db.upsert_hotel(Hotel(name="Namba Oriental", city="Osaka", country="Japan"))
+        tmp_db.upsert_booking(
+            Booking(
+                hotel_id=h_jp,
+                check_in=date(2026, 8, 31),
+                check_out=date(2026, 9, 3),
+                booked_price=135833,
+                currency="JPY",
+            )
+        )
+        tmp_db.add_snapshot(
+            PriceSnapshot(
+                hotel_id=h_jp,
+                check_in=date(2026, 8, 31),
+                check_out=date(2026, 9, 3),
+                platform="booking.com",
+                price=100000,
+                currency="JPY",
+            )
+        )
+
+        # Sri Lanka hotel (USD)
+        h_lk = tmp_db.upsert_hotel(
+            Hotel(name="Atha Resort Sigiriya", city="Sigiriya", country="Sri Lanka")
+        )
+        tmp_db.upsert_booking(
+            Booking(
+                hotel_id=h_lk,
+                check_in=date(2026, 8, 24),
+                check_out=date(2026, 8, 26),
+                booked_price=716,
+                currency="USD",
+            )
+        )
+        tmp_db.add_snapshot(
+            PriceSnapshot(
+                hotel_id=h_lk,
+                check_in=date(2026, 8, 24),
+                check_out=date(2026, 8, 26),
+                platform="booking.com",
+                price=500,
+                currency="USD",
+            )
+        )
+
+        # Vienna hotel (EUR)
+        h_at = tmp_db.upsert_hotel(Hotel(name="Vienna Residence", city="Vienna", country="Austria"))
+        tmp_db.upsert_booking(
+            Booking(
+                hotel_id=h_at,
+                check_in=date(2026, 5, 21),
+                check_out=date(2026, 5, 26),
+                booked_price=4219,
+                currency="EUR",
+            )
+        )
+        tmp_db.add_snapshot(
+            PriceSnapshot(
+                hotel_id=h_at,
+                check_in=date(2026, 5, 21),
+                check_out=date(2026, 5, 26),
+                platform="booking.com",
+                price=3500,
+                currency="EUR",
+            )
+        )
+
+        alerts = run_analysis(tmp_db, config)
+        # All three bookings should have cheaper snapshots → 3 alerts
+        assert len(alerts) >= 3
+        # Each alert should reference the correct booking
+        hotel_names = {a.title for a in alerts}
+        assert "Price drop: Namba Oriental" in hotel_names
+        assert "Price drop: Atha Resort Sigiriya" in hotel_names
+        assert "Price drop: Vienna Residence" in hotel_names
+
     def test_run_analysis_alerts_have_ids(self, tmp_db, config):
         """Persisted alerts should have database IDs assigned."""
         hotel_id = tmp_db.upsert_hotel(Hotel(name="Test Hotel", city="Tokyo"))

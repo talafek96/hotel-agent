@@ -187,6 +187,12 @@ toggleNewHotel();
 <div style="margin-top:1rem; display:flex; gap:1rem; align-items:center;">
     <button type="submit" class="btn btn-primary">{{ "Create Booking" if is_new else "Save Changes" }}</button>
     <a href="/bookings" style="font-size:.875rem;">Back to Bookings</a>
+    {% if not is_new and booking.id %}
+    <form method="post" action="/bookings/{{ booking.id }}/delete" style="margin-left:auto;"
+          onsubmit="return confirm('Delete this booking and its alerts? This cannot be undone.');">
+        <button type="submit" class="btn btn-small" style="background:#fee2e2; color:#991b1b;">Delete Booking</button>
+    </form>
+    {% endif %}
 </div>
 </form>
 {% endblock %}

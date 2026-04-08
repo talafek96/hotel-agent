@@ -30,6 +30,57 @@ from ..utils import (
 
 log = logging.getLogger(__name__)
 
+
+# ── Import merge helper ─────────────────────────────────
+
+
+def _merge_booking(existing: Booking, incoming: Booking) -> None:
+    """Merge *incoming* (from Excel re-import) into *existing* (from DB).
+
+    Strategy: overwrite fields that the Excel provides with real data.
+    Preserve fields the user may have edited manually and the Excel
+    doesn't contain (e.g. travelers, bathroom_type, extras, notes).
+    """
+    # Always update from Excel when the incoming value looks populated
+    if incoming.check_in:
+        existing.check_in = incoming.check_in
+    if incoming.check_out:
+        existing.check_out = incoming.check_out
+    if incoming.booked_price:
+        existing.booked_price = incoming.booked_price
+        existing.currency = incoming.currency
+    if incoming.room_type:
+        existing.room_type = incoming.room_type
+    if incoming.platform:
+        existing.platform = incoming.platform
+    if incoming.booking_reference:
+        existing.booking_reference = incoming.booking_reference
+    if incoming.booking_url:
+        existing.booking_url = incoming.booking_url
+    if incoming.cancellation_deadline:
+        existing.cancellation_deadline = incoming.cancellation_deadline
+    # Booleans: only overwrite if the incoming explicitly sets them True
+    # (Excel rarely has these; avoid clearing user edits)
+    if incoming.is_cancellable:
+        existing.is_cancellable = True
+    if incoming.breakfast_included:
+        existing.breakfast_included = True
+    if incoming.dinner_included:
+        existing.dinner_included = True
+
+    # Preserve: travelers, bathroom_type, extras, notes — these are
+    # typically user-edited and not present in the Excel.
+    # Append import warnings to existing notes if any.
+    if incoming.notes:
+        warning_parts = [
+            p.strip() for p in incoming.notes.split("|") if "SUSPICIOUS" in p or "MISMATCH" in p
+        ]
+        if warning_parts and existing.notes:
+            existing.notes = existing.notes + " | " + " | ".join(warning_parts)
+        elif warning_parts:
+            existing.notes = " | ".join(warning_parts)
+
+
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 
 
@@ -645,6 +696,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
             },
         )
 
+    @app.post("/bookings/{booking_id}/delete", response_class=HTMLResponse)
+    async def booking_delete(booking_id: int):
+        with get_db() as db:
+            db.delete_booking(booking_id)
+        return RedirectResponse("/bookings", status_code=303)
+
     # ── Snapshots ──────────────────────────────────
     @app.get("/snapshots", response_class=HTMLResponse)
     async def snapshots_page(request: Request):
@@ -766,7 +823,26 @@ def create_app(config_path: str | None = None) -> FastAPI:
             tmp_path = tmp.name
 
         try:
-            records = parse_excel_with_llm(config, tmp_path, sheet, table or None)
+            # Build existing-bookings context for the LLM
+            existing_ctx: list[dict] = []
+            with get_db() as db:
+                for b in db.get_active_bookings():
+                    h = db.get_hotel(b.hotel_id)
+                    existing_ctx.append(
+                        {
+                            "booking_id": b.id,
+                            "hotel": h.name if h else "",
+                            "city": h.city if h else "",
+                            "check_in": str(b.check_in or ""),
+                            "check_out": str(b.check_out or ""),
+                            "booking_reference": b.booking_reference,
+                            "platform": b.platform,
+                        }
+                    )
+
+            records = parse_excel_with_llm(
+                config, tmp_path, sheet, table or None, existing_ctx or None
+            )
             pairs = excel_to_models(records, config.travelers)
 
             with get_db() as db:
@@ -775,11 +851,47 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 for hotel, booking in pairs:
                     hotel_id = db.upsert_hotel(hotel)
                     booking.hotel_id = hotel_id
-                    existing = db.get_bookings_for_hotel(hotel_id)
-                    booking_id = db.upsert_booking(booking)
-                    if any(b.id == booking_id for b in existing):
+
+                    # Check if the LLM matched an existing booking
+                    matched_id = None
+                    raw_entry = next(
+                        (
+                            r
+                            for r in records
+                            if r.get("name") == hotel.name
+                            and r.get("check_in") == str(booking.check_in or "")
+                        ),
+                        None,
+                    )
+                    if raw_entry:
+                        matched_id = raw_entry.get("existing_booking_id")
+
+                    # Try to find the existing booking to merge with
+                    existing = None
+                    if matched_id:
+                        existing = db.get_booking_by_id(int(matched_id))
+                    if not existing and booking.booking_reference:
+                        # Fallback to booking_reference dedup
+                        for eb in db.get_bookings_for_hotel(hotel_id):
+                            if (
+                                eb.booking_reference
+                                and eb.booking_reference == booking.booking_reference
+                            ):
+                                existing = eb
+                                break
+
+                    if existing and existing.id:
+                        # Merge: update fields from Excel, preserve user-edited
+                        # fields that the Excel doesn't contain
+                        _merge_booking(existing, booking)
+                        db.update_booking(existing)
+                        # Re-point for the result display
+                        booking.id = existing.id
+                        booking.notes = existing.notes
                         updated += 1
                     else:
+                        booking_id = db.upsert_booking(booking)
+                        booking.id = booking_id
                         saved += 1
 
             parts = []
@@ -1567,6 +1679,13 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "platform_groups_expanded": PLATFORM_GROUPS_EXPANDED,
             },
         )
+
+    # ── Database reset ─────────────────────────────
+    @app.post("/db/reset")
+    async def db_reset():
+        with get_db() as db:
+            db.reset_all()
+        return RedirectResponse("/bookings", status_code=303)
 
     # ── Trends ────────────────────────────────────
     @app.get("/trends", response_class=HTMLResponse)
