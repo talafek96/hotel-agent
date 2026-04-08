@@ -140,3 +140,78 @@ class TestExcelToModels:
         for _, booking in pairs:
             assert booking.travelers.adults == 2
             assert booking.travelers.children_ages == [4, 7]
+
+
+class TestPriceSanityWarnings:
+    """Format-agnostic warnings for suspicious price/currency combos."""
+
+    def test_suspiciously_low_price_flagged(self):
+        """1630 JPY (~$11) for a hotel should produce a warning."""
+        parsed = [
+            {
+                "name": "Holiday Inn Delhi",
+                "city": "Delhi",
+                "country": "India",
+                "check_in": "2026-09-30",
+                "check_out": "2026-10-01",
+                "price": 1630,
+                "currency": "JPY",
+            }
+        ]
+        pairs = excel_to_models(parsed)
+        _, booking = pairs[0]
+        assert "SUSPICIOUS PRICE" in booking.notes
+
+    def test_country_currency_mismatch_flagged(self):
+        """JPY for a hotel in India should produce a mismatch warning."""
+        parsed = [
+            {
+                "name": "Hotel Mumbai",
+                "country": "India",
+                "price": 50000,
+                "currency": "JPY",
+            }
+        ]
+        pairs = excel_to_models(parsed)
+        _, booking = pairs[0]
+        assert "CURRENCY/COUNTRY MISMATCH" in booking.notes
+
+    def test_normal_price_no_warning(self):
+        """135833 JPY for a hotel in Japan is perfectly normal."""
+        parsed = [
+            {
+                "name": "Namba Oriental",
+                "country": "Japan",
+                "check_in": "2026-08-31",
+                "check_out": "2026-09-03",
+                "price": 135833,
+                "currency": "JPY",
+            }
+        ]
+        pairs = excel_to_models(parsed)
+        _, booking = pairs[0]
+        assert "SUSPICIOUS" not in (booking.notes or "")
+        assert "MISMATCH" not in (booking.notes or "")
+
+    def test_usd_hotel_in_sri_lanka_ok(self):
+        """USD for Sri Lanka is common (booked through international OTA)."""
+        parsed = [
+            {
+                "name": "Atha Resort",
+                "country": "Sri Lanka",
+                "price": 716,
+                "currency": "USD",
+                "check_in": "2026-08-24",
+                "check_out": "2026-08-26",
+            }
+        ]
+        pairs = excel_to_models(parsed)
+        _, booking = pairs[0]
+        assert "MISMATCH" not in (booking.notes or "")
+
+    def test_zero_price_no_warning(self):
+        """Price of 0 should not produce spurious warnings."""
+        parsed = [{"name": "Hotel", "price": 0, "currency": "USD"}]
+        pairs = excel_to_models(parsed)
+        _, booking = pairs[0]
+        assert "SUSPICIOUS" not in (booking.notes or "")

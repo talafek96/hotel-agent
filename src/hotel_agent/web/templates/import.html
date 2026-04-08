@@ -168,13 +168,26 @@ function showImportProgress() {
 {% if result and result.success and result.pairs %}
 <div class="card">
     <h2>Imported Bookings</h2>
+    {% set ns_warn = namespace(any=false) %}
+    {% for hotel, booking in result.pairs %}
+        {% if booking.notes and "SUSPICIOUS" in booking.notes or "MISMATCH" in booking.notes %}
+            {% set ns_warn.any = true %}
+        {% endif %}
+    {% endfor %}
+    {% if ns_warn.any %}
+    <div class="alert-box alert-info" style="border-color:#f59e0b; background:#fffbeb; color:#92400e; margin-bottom:1rem;">
+        Some bookings have warnings — check the Notes column below and
+        <a href="/bookings">edit them</a> if the currency or price is wrong.
+    </div>
+    {% endif %}
     <table>
         <thead>
-            <tr><th>#</th><th>Hotel</th><th>City</th><th>Check-in</th><th>Check-out</th><th>Price</th><th>Platform</th></tr>
+            <tr><th>#</th><th>Hotel</th><th>City</th><th>Check-in</th><th>Check-out</th><th>Price</th><th>Platform</th><th>Notes</th></tr>
         </thead>
         <tbody>
             {% for hotel, booking in result.pairs %}
-            <tr>
+            {% set has_warning = booking.notes and ("SUSPICIOUS" in booking.notes or "MISMATCH" in booking.notes) %}
+            <tr{% if has_warning %} style="background:#fffbeb;"{% endif %}>
                 <td>{{ loop.index }}</td>
                 <td><strong>{{ hotel.name }}</strong></td>
                 <td>{{ hotel.city }}</td>
@@ -182,6 +195,7 @@ function showImportProgress() {
                 <td>{{ booking.check_out or "?" }}</td>
                 <td>{{ "{:,.0f}".format(booking.booked_price) }} {{ booking.currency }}</td>
                 <td>{{ booking.platform }}</td>
+                <td style="font-size:.75rem;{% if has_warning %} color:#92400e; font-weight:600;{% endif %}">{{ booking.notes }}</td>
             </tr>
             {% endfor %}
         </tbody>
