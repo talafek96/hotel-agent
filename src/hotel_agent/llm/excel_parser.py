@@ -170,8 +170,17 @@ def parse_excel_with_llm(
     file_path: str | Path,
     sheet_name: str,
     table_name: str | None = None,
+    existing_bookings: list[dict] | None = None,
 ) -> list[dict]:
     """Parse an Excel file using LLM to extract hotel bookings.
+
+    Parameters
+    ----------
+    existing_bookings:
+        Optional list of ``{"booking_id": int, "hotel": str, "city": str,
+        "check_in": str, "check_out": str, "booking_reference": str,
+        "platform": str}`` dicts from the current database.  Passed to
+        the LLM so it can match rows against existing records.
 
     Returns a list of parsed hotel booking dicts.
     """
@@ -183,10 +192,28 @@ def parse_excel_with_llm(
     log.info(f"Table has {len(headers)} columns, {len(rows)} data rows")
     log.info(f"Table text size: {len(table_text)} chars")
 
+    existing_section = ""
+    if existing_bookings:
+        lines = []
+        for eb in existing_bookings:
+            parts = [f"id={eb['booking_id']}"]
+            for k in ("hotel", "city", "check_in", "check_out", "booking_reference", "platform"):
+                v = eb.get(k)
+                if v:
+                    parts.append(f"{k}={v}")
+            lines.append("  " + ", ".join(parts))
+        existing_section = (
+            "\n\nEXISTING BOOKINGS IN DATABASE (match against these when possible):\n"
+            + "\n".join(lines)
+            + "\n\nFor each hotel entry, if it matches an existing booking above, "
+            'include "existing_booking_id": <id> in the output. '
+            "Match by booking reference first, then by hotel name + dates."
+        )
+
     prompt = f"""Parse the following hotel booking data from an Excel spreadsheet.
 
 EXCEL DATA:
-{table_text}
+{table_text}{existing_section}
 
 Extract every hotel booking entry and return as JSON following the schema in your instructions."""
 
