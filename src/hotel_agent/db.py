@@ -438,6 +438,33 @@ class Database:
         )
         self.conn.commit()
 
+    def delete_booking(self, booking_id: int) -> bool:
+        """Delete a booking and its related alerts. Returns True if found."""
+        row = self.conn.execute("SELECT id FROM bookings WHERE id=?", (booking_id,)).fetchone()
+        if not row:
+            return False
+        self.conn.execute("DELETE FROM alerts WHERE booking_id=?", (booking_id,))
+        self.conn.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+        self.conn.commit()
+        return True
+
+    def reset_all(self) -> dict[str, int]:
+        """Delete all data from every table. Returns counts per table."""
+        counts: dict[str, int] = {}
+        for table in (
+            "alerts",
+            "price_snapshots",
+            "scrape_runs",
+            "bookings",
+            "watchlist",
+            "hotels",
+        ):
+            row = self.conn.execute(f"SELECT count(*) FROM {table}").fetchone()
+            counts[table] = row[0] if row else 0
+            self.conn.execute(f"DELETE FROM {table}")
+        self.conn.commit()
+        return counts
+
     # ── Watchlist ───────────────────────────────────────────
 
     def add_watchlist(self, entry: WatchlistEntry) -> int:

@@ -383,6 +383,18 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 </form>
 
+<!-- Database Reset (outside the config form) -->
+<div class="card" style="margin-top:2rem; border:1px solid #fca5a5;">
+    <h2 style="color:#991b1b;">Reset Database</h2>
+    <p style="font-size:.85rem; color:#64748b; margin-bottom:1rem;">
+        Delete all hotels, bookings, price snapshots, and alerts. Configuration and API keys are not affected.
+    </p>
+    <form method="post" action="/db/reset"
+          onsubmit="return confirm('This will permanently delete ALL hotels, bookings, snapshots, and alerts.\n\nThis cannot be undone. Continue?');">
+        <button type="submit" class="btn btn-small" style="background:#fee2e2; color:#991b1b;">Reset All Data</button>
+    </form>
+</div>
+
 <script>
 // Platform filter: Select All / Deselect All
 function toggleAllPlatforms(checked) {

@@ -645,6 +645,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
             },
         )
 
+    @app.post("/bookings/{booking_id}/delete", response_class=HTMLResponse)
+    async def booking_delete(booking_id: int):
+        with get_db() as db:
+            db.delete_booking(booking_id)
+        return RedirectResponse("/bookings", status_code=303)
+
     # ── Snapshots ──────────────────────────────────
     @app.get("/snapshots", response_class=HTMLResponse)
     async def snapshots_page(request: Request):
@@ -1567,6 +1573,13 @@ def create_app(config_path: str | None = None) -> FastAPI:
                 "platform_groups_expanded": PLATFORM_GROUPS_EXPANDED,
             },
         )
+
+    # ── Database reset ─────────────────────────────
+    @app.post("/db/reset")
+    async def db_reset():
+        with get_db() as db:
+            db.reset_all()
+        return RedirectResponse("/bookings", status_code=303)
 
     # ── Trends ────────────────────────────────────
     @app.get("/trends", response_class=HTMLResponse)
