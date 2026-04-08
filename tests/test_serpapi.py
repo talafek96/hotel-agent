@@ -11,12 +11,14 @@ from hotel_agent.api.serpapi_client import (
     SerpAPIError,
     SerpAPIResult,
     _build_query,
+    _country_to_gl,
     _extract_number,
     _parse_first_property,
     _parse_property_detail,
     search_hotel_prices,
 )
 from hotel_agent.models import Hotel, TravelerComposition
+from hotel_agent.utils import normalize_currency
 
 # ── Helpers ────────────────────────────────────────────────
 
@@ -780,3 +782,200 @@ class TestSearchHotelPrices:
             )
         assert mock_get.call_count == 1
         assert len(result.snapshots) == 1
+
+
+# ── _country_to_gl ────────────────────────────────────────
+
+
+class TestCountryToGl:
+    """Tests for the country name → gl code mapping."""
+
+    def test_japan(self):
+        assert _country_to_gl("Japan") == "jp"
+
+    def test_sri_lanka(self):
+        assert _country_to_gl("Sri Lanka") == "lk"
+
+    def test_india(self):
+        assert _country_to_gl("India") == "in"
+
+    def test_austria(self):
+        assert _country_to_gl("Austria") == "at"
+
+    def test_case_insensitive(self):
+        assert _country_to_gl("JAPAN") == "jp"
+        assert _country_to_gl("sri lanka") == "lk"
+
+    def test_whitespace_stripped(self):
+        assert _country_to_gl("  Japan  ") == "jp"
+
+    def test_unknown_country_falls_back_to_us(self):
+        assert _country_to_gl("Atlantis") == "us"
+
+    def test_empty_string_falls_back_to_us(self):
+        assert _country_to_gl("") == "us"
+
+    def test_none_falls_back_to_us(self):
+        # country could be empty string from Hotel model default
+        assert _country_to_gl("") == "us"
+
+
+# ── normalize_currency ────────────────────────────────────────
+
+
+class TestNormalizeCurrency:
+    """Tests for the currency normalisation function."""
+
+    def test_iso_codes_pass_through(self):
+        assert normalize_currency("JPY") == "JPY"
+        assert normalize_currency("USD") == "USD"
+        assert normalize_currency("EUR") == "EUR"
+        assert normalize_currency("ILS") == "ILS"
+
+    def test_case_insensitive_iso(self):
+        assert normalize_currency("jpy") == "JPY"
+        assert normalize_currency("usd") == "USD"
+        assert normalize_currency("Eur") == "EUR"
+
+    def test_symbols(self):
+        assert normalize_currency("¥") == "JPY"
+        assert normalize_currency("₪") == "ILS"
+        assert normalize_currency("€") == "EUR"
+        assert normalize_currency("$") == "USD"
+        assert normalize_currency("£") == "GBP"
+        assert normalize_currency("₹") == "INR"
+
+    def test_words(self):
+        assert normalize_currency("euro") == "EUR"
+        assert normalize_currency("yen") == "JPY"
+        assert normalize_currency("shekel") == "ILS"
+        assert normalize_currency("dollar") == "USD"
+        assert normalize_currency("pound") == "GBP"
+
+    def test_none_returns_usd(self):
+        assert normalize_currency(None) == "USD"
+
+    def test_empty_returns_usd(self):
+        assert normalize_currency("") == "USD"
+
+    def test_whitespace_stripped(self):
+        assert normalize_currency("  JPY  ") == "JPY"
+        assert normalize_currency(" ¥ ") == "JPY"
+
+    def test_unknown_returns_usd(self):
+        assert normalize_currency("zorkmids") == "USD"
+
+
+# ── Currency validation in _do_search ─────────────────────
+
+
+class TestCurrencyValidation:
+    """Ensure invalid currency values don't reach SerpAPI."""
+
+    def test_gl_derived_from_hotel_country(self):
+        """search_hotel_prices should derive gl from hotel.country."""
+        data = {"properties": []}
+
+        class MockResp:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return data
+
+        hotel = _make_hotel(country="Sri Lanka")
+        with patch(
+            "hotel_agent.api.serpapi_client.requests.get", return_value=MockResp()
+        ) as mock_get:
+            search_hotel_prices(
+                api_key="test-key",
+                hotel=hotel,
+                check_in=date(2025, 8, 1),
+                check_out=date(2025, 8, 3),
+            )
+        call_url = mock_get.call_args[0][0]
+        assert "gl=lk" in call_url
+
+    def test_gl_explicit_overrides_country(self):
+        """Explicit gl parameter should override country-derived value."""
+        data = {"properties": []}
+
+        class MockResp:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return data
+
+        hotel = _make_hotel(country="Sri Lanka")
+        with patch(
+            "hotel_agent.api.serpapi_client.requests.get", return_value=MockResp()
+        ) as mock_get:
+            search_hotel_prices(
+                api_key="test-key",
+                hotel=hotel,
+                check_in=date(2025, 8, 1),
+                check_out=date(2025, 8, 3),
+                gl="jp",
+            )
+        call_url = mock_get.call_args[0][0]
+        assert "gl=jp" in call_url
+
+    def test_none_currency_falls_back_to_usd(self):
+        """None currency should be replaced with USD before reaching SerpAPI."""
+        data = {"properties": []}
+
+        class MockResp:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return data
+
+        hotel = _make_hotel()
+        with patch(
+            "hotel_agent.api.serpapi_client.requests.get", return_value=MockResp()
+        ) as mock_get:
+            search_hotel_prices(
+                api_key="test-key",
+                hotel=hotel,
+                check_in=date(2025, 8, 1),
+                check_out=date(2025, 8, 3),
+                currency=None,  # type: ignore[arg-type]
+            )
+        call_url = mock_get.call_args[0][0]
+        assert "currency=USD" in call_url
+        assert "currency=None" not in call_url
+
+    def test_empty_currency_falls_back_to_usd(self):
+        """Empty-string currency should be replaced with USD."""
+        data = {"properties": []}
+
+        class MockResp:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return data
+
+        hotel = _make_hotel()
+        with patch(
+            "hotel_agent.api.serpapi_client.requests.get", return_value=MockResp()
+        ) as mock_get:
+            search_hotel_prices(
+                api_key="test-key",
+                hotel=hotel,
+                check_in=date(2025, 8, 1),
+                check_out=date(2025, 8, 3),
+                currency="",
+            )
+        call_url = mock_get.call_args[0][0]
+        assert "currency=USD" in call_url

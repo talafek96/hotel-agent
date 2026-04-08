@@ -11,7 +11,7 @@ from openpyxl.utils import range_boundaries
 
 from ..config import AppConfig
 from ..models import Booking, Hotel, TravelerComposition
-from ..utils import parse_date
+from ..utils import normalize_currency, parse_date
 from .client import call_llm_json
 
 log = logging.getLogger(__name__)
@@ -115,7 +115,9 @@ IMPORTANT RULES:
 - Extract ALL hotel entries from the data, do not skip any rows
 - Dates must be in YYYY-MM-DD format
 - Prices should be numeric (no currency symbols)
-- Identify the currency from context (column headers, symbols like ¥, $, ₪, €)
+- Currency MUST be a 3-letter ISO 4217 code: JPY, USD, EUR, ILS, GBP, etc.
+  Do NOT use symbols (¥, $, ₪, €) or words (yen, euro, shekel) — always use the 3-letter code.
+  Infer the currency from column headers, symbols, or country context.
 - If a booking reference or order number is present, extract it
 - If cancellation info is present, extract the deadline date
 - Platform names should be normalized: "Agoda", "Booking.com", "Hotels.com", "Expedia", "Direct"
@@ -138,7 +140,7 @@ Return a JSON object with this structure (include only fields you can populate):
       "check_out": "YYYY-MM-DD",
       "room_type": "e.g. Deluxe Twin, Standard Double",
       "price": 12345,
-      "currency": "JPY",
+      "currency": "JPY (MUST be 3-letter ISO code, not a symbol)",
       "platform": "Agoda",
       "booking_reference": "reference number if found",
       "is_cancellable": true,
@@ -222,8 +224,8 @@ def excel_to_models(
             check_out=parse_date(entry.get("check_out")),
             travelers=travelers,
             room_type=entry.get("room_type", ""),
-            booked_price=float(entry.get("price", 0)),
-            currency=entry.get("currency", "JPY"),
+            booked_price=float(entry.get("price") or 0),
+            currency=normalize_currency(entry.get("currency")),
             is_cancellable=bool(entry.get("is_cancellable", False)),
             cancellation_deadline=parse_date(entry.get("cancellation_deadline")),
             breakfast_included=bool(entry.get("breakfast_included", False)),

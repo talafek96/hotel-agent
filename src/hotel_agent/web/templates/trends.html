@@ -24,15 +24,22 @@
     <div class="stat-card">
         <div class="stat-label">Potential Savings</div>
         <div class="stat-number" style="color:#16a34a;">
-            {% set ns = namespace(savings=0, currency='') %}
+            {# Group savings by currency to avoid summing across different units #}
+            {% set ns = namespace(savings={}) %}
             {% for c in charts %}
                 {% if c.best_price is not none and c.best_price < c.booking.booked_price %}
-                    {% set ns.savings = ns.savings + (c.booking.booked_price - c.best_price) %}
-                    {% set ns.currency = c.booking.currency %}
+                    {% set cur = c.booking.currency %}
+                    {% if cur in ns.savings %}
+                        {% set _ = ns.savings.update({cur: ns.savings[cur] + (c.booking.booked_price - c.best_price)}) %}
+                    {% else %}
+                        {% set _ = ns.savings.update({cur: c.booking.booked_price - c.best_price}) %}
+                    {% endif %}
                 {% endif %}
             {% endfor %}
-            {% if ns.savings > 0 %}
-                {{ "{:,.0f}".format(ns.savings) }} {{ ns.currency }}
+            {% if ns.savings %}
+                {% for cur, amt in ns.savings.items() %}
+                    {{ "{:,.0f}".format(amt) }} {{ cur }}{{ ", " if not loop.last else "" }}
+                {% endfor %}
             {% else %}
                 --
             {% endif %}
@@ -125,10 +132,12 @@ function pickColor(i) { return COLORS[i % COLORS.length]; }
     var bookedData = [];
     var bestData = [];
     var bestColors = [];
+    var currencies = [];
 
     {% for c in charts %}
     labels.push('{{ c.hotel.name[:20] }}');
     bookedData.push({{ c.booking.booked_price }});
+    currencies.push('{{ c.booking.currency }}');
     {% if c.best_price is not none %}
     bestData.push({{ c.best_price }});
     bestColors.push({{ c.best_price }} <= {{ c.booking.booked_price }} ? '#16a34a' : '#dc2626');
@@ -162,6 +171,14 @@ function pickColor(i) { return COLORS[i % COLORS.length]; }
             maintainAspectRatio: false,
             plugins: {
                 legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            var cur = currencies[ctx.dataIndex] || '';
+                            return ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString() + ' ' + cur;
+                        }
+                    }
+                }
             },
             scales: {
                 y: {

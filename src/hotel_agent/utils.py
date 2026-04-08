@@ -81,6 +81,114 @@ def platform_url(platform: str) -> str:
     return PLATFORM_URLS.get(platform.lower().strip(), "")
 
 
+# ── Currency normalisation ──────────────────────────────────
+
+
+# Maps symbols, common names, and non-standard codes to ISO 4217.
+_CURRENCY_ALIASES: dict[str, str] = {
+    # Symbols
+    "¥": "JPY",
+    "￥": "JPY",
+    "$": "USD",
+    "€": "EUR",
+    "₪": "ILS",
+    "£": "GBP",
+    "₹": "INR",
+    "₩": "KRW",
+    "฿": "THB",
+    "₫": "VND",
+    "₱": "PHP",
+    "₺": "TRY",
+    "₴": "UAH",
+    "₽": "RUB",
+    "r$": "BRL",
+    "rm": "MYR",
+    "kr": "SEK",  # also NOK/DKK, but SEK is most common
+    "kč": "CZK",
+    "zł": "PLN",
+    "ft": "HUF",
+    "lei": "RON",
+    "лв": "BGN",
+    # Names / words
+    "yen": "JPY",
+    "dollar": "USD",
+    "dollars": "USD",
+    "euro": "EUR",
+    "euros": "EUR",
+    "shekel": "ILS",
+    "shekels": "ILS",
+    "pound": "GBP",
+    "pounds": "GBP",
+    "rupee": "INR",
+    "rupees": "INR",
+    "won": "KRW",
+    "baht": "THB",
+    "dong": "VND",
+    "peso": "MXN",
+    "pesos": "MXN",
+    "real": "BRL",
+    "reais": "BRL",
+    "ringgit": "MYR",
+    "krona": "SEK",
+    "kronor": "SEK",
+    "krone": "NOK",
+    "kroner": "NOK",
+    "franc": "CHF",
+    "francs": "CHF",
+    "lira": "TRY",
+    # Non-standard abbreviations
+    "nis": "ILS",
+    "rmb": "CNY",
+    "yuan": "CNY",
+    "us$": "USD",
+    "usd$": "USD",
+    "a$": "AUD",
+    "au$": "AUD",
+    "c$": "CAD",
+    "ca$": "CAD",
+    "nz$": "NZD",
+    "s$": "SGD",
+    "hk$": "HKD",
+    "nt$": "TWD",
+}
+
+
+def normalize_currency(raw: str | None) -> str:
+    """Normalise a currency value to an ISO 4217 code.
+
+    Handles symbols (¥, ₪, €), full names (``"euro"``), and non-standard
+    abbreviations (``"NIS"``).  Returns ``"USD"`` when the input is empty,
+    ``None``, or unrecognised.
+
+    Already-valid 3-letter codes (``"JPY"``, ``"EUR"``) pass through unchanged.
+    """
+    if not raw:
+        return "USD"
+
+    cleaned = raw.strip()
+    if not cleaned:
+        return "USD"
+
+    # Look up alias first (case-insensitive) — catches words like "yen", "won"
+    alias = _CURRENCY_ALIASES.get(cleaned.lower())
+    if alias:
+        return alias
+
+    # Already a valid-looking 3-letter ISO code?
+    upper = cleaned.upper()
+    if len(upper) == 3 and upper.isalpha():
+        return upper
+
+    # Single-char symbol lookup
+    if len(cleaned) <= 2:
+        alias = _CURRENCY_ALIASES.get(cleaned)
+        if alias:
+            return alias
+
+    # Fallback
+    return "USD"
+
+
 # Canonical platform metadata for the config UI checklist.
 # key = normalised slug (matches price_snapshots.platform), value = group name.
 # Display names come from SerpAPI (source_display) — this dict only assigns groups.

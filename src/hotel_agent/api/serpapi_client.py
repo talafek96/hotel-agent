@@ -10,10 +10,90 @@ from urllib.parse import urlencode
 import requests
 
 from hotel_agent.models import Hotel, PriceSnapshot, TravelerComposition
+from hotel_agent.utils import normalize_currency
 
 logger = logging.getLogger(__name__)
 
 SERPAPI_BASE = "https://serpapi.com/search"
+
+# Country name → Google gl parameter (ISO 3166-1 alpha-2).
+# Covers common tourism destinations; unknown countries fall back to "us".
+_COUNTRY_GL: dict[str, str] = {
+    "japan": "jp",
+    "sri lanka": "lk",
+    "india": "in",
+    "austria": "at",
+    "germany": "de",
+    "france": "fr",
+    "italy": "it",
+    "spain": "es",
+    "united kingdom": "gb",
+    "uk": "gb",
+    "united states": "us",
+    "usa": "us",
+    "thailand": "th",
+    "australia": "au",
+    "south korea": "kr",
+    "korea": "kr",
+    "china": "cn",
+    "taiwan": "tw",
+    "indonesia": "id",
+    "vietnam": "vn",
+    "malaysia": "my",
+    "singapore": "sg",
+    "philippines": "ph",
+    "turkey": "tr",
+    "greece": "gr",
+    "portugal": "pt",
+    "netherlands": "nl",
+    "switzerland": "ch",
+    "czech republic": "cz",
+    "czechia": "cz",
+    "hungary": "hu",
+    "poland": "pl",
+    "croatia": "hr",
+    "mexico": "mx",
+    "brazil": "br",
+    "argentina": "ar",
+    "canada": "ca",
+    "new zealand": "nz",
+    "egypt": "eg",
+    "morocco": "ma",
+    "south africa": "za",
+    "israel": "il",
+    "united arab emirates": "ae",
+    "uae": "ae",
+    "maldives": "mv",
+    "nepal": "np",
+    "cambodia": "kh",
+    "myanmar": "mm",
+    "laos": "la",
+    "ireland": "ie",
+    "belgium": "be",
+    "denmark": "dk",
+    "sweden": "se",
+    "norway": "no",
+    "finland": "fi",
+    "iceland": "is",
+    "romania": "ro",
+    "bulgaria": "bg",
+    "colombia": "co",
+    "peru": "pe",
+    "chile": "cl",
+    "jordan": "jo",
+    "kenya": "ke",
+    "tanzania": "tz",
+}
+
+
+def _country_to_gl(country: str) -> str:
+    """Map a hotel's country name to Google's ``gl`` parameter.
+
+    Falls back to ``"us"`` for unrecognised names.
+    """
+    if not country:
+        return "us"
+    return _COUNTRY_GL.get(country.strip().lower(), "us")
 
 
 class SerpAPIError(Exception):
@@ -41,13 +121,19 @@ def search_hotel_prices(
     check_out: date,
     travelers: TravelerComposition | None = None,
     currency: str = "JPY",
-    gl: str = "jp",
+    gl: str | None = None,
     hl: str = "en",
 ) -> SerpAPIResult:
     """Query SerpAPI Google Hotels and return price snapshots + property info.
 
     If the hotel has a cached ``serpapi_property_token``, uses it directly.
     Otherwise searches by name and takes the first result.
+
+    Parameters
+    ----------
+    gl:
+        Google geo-location code.  When ``None`` (default), derived
+        automatically from ``hotel.country``.
 
     Retry chain when 0 results are returned:
     1. Original params (children + full query)
@@ -56,6 +142,9 @@ def search_hotel_prices(
     """
     if not api_key:
         raise SerpAPIError("SERPAPI_KEY is not configured")
+
+    if gl is None:
+        gl = _country_to_gl(hotel.country)
 
     travelers = travelers or TravelerComposition()
 
@@ -122,6 +211,9 @@ def _do_search(
     query: str,
 ) -> SerpAPIResult:
     """Execute a single SerpAPI Google Hotels search."""
+    # Normalise currency to a valid ISO 4217 code (handles symbols, names, None)
+    currency = normalize_currency(currency)
+
     params: dict[str, str | int] = {
         "engine": "google_hotels",
         "check_in_date": check_in.isoformat(),

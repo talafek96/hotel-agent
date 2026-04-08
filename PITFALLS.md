@@ -29,3 +29,15 @@
 - **Cause**: A broken Windows .exe was still holding port 8470 invisibly (no tray icon). The WSL launcher's `is_server_running()` detected the port as occupied, skipped starting a new server, and opened the browser to the broken Windows process.
 - **Fix**: Kill stale processes on the port before testing. On Windows: `netstat -ano | findstr :8470` then `taskkill /F /PID <pid>`. On Linux: `lsof -ti :8470 | xargs kill`.
 - **Lesson**: When debugging "Internal Server Error", always check if another process owns the port first.
+
+## LLM null currency causes SerpAPI 400
+- **Symptom**: `SerpAPI request failed: 400 Client Error: Bad Request` for ALL hotels when importing multi-currency Excel
+- **Cause**: LLM returned currency symbols (`₪`, `¥`, `euro`) and words instead of ISO 4217 codes (`ILS`, `JPY`, `EUR`). SerpAPI rejects non-ISO currency values with 400.
+- **Fix**: (1) Improved LLM prompt to explicitly require 3-letter ISO codes. (2) Added `normalize_currency()` in `utils.py` that maps symbols/words → ISO codes as a safety net. Applied in both `excel_to_models` and `_do_search`.
+- **Commit**: eabdb40
+
+## SerpAPI gl param hardcoded to jp
+- **Symptom**: Non-Japanese hotels (Sri Lanka, Austria, India) get poor/no search results from Google Hotels
+- **Cause**: `gl="jp"` hardcoded in `search_hotel_prices` — Google searches from Japan's perspective
+- **Fix**: Derive `gl` from `hotel.country` via `_country_to_gl()` mapping; falls back to `"us"` for unknown countries
+- **Commit**: eabdb40
