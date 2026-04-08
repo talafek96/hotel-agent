@@ -33,11 +33,88 @@ document.addEventListener('DOMContentLoaded', function() {
 {% if not bookings %}
 <div class="alert-box alert-info">No active bookings. <a href="/import">Import from Excel</a> to get started.</div>
 {% else %}
-<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:1.25rem;">
+
+<style>
+/* ── Booking filters bar ── */
+.filter-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .75rem;
+    margin-bottom: 1.25rem; padding: .75rem 1rem;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: .5rem;
+}
+.filter-bar .search-box {
+    flex: 1 1 200px; padding: .4rem .75rem; font-size: .8125rem;
+    border: 1px solid #d1d5db; border-radius: .375rem; background: #fff; color: #1e293b;
+}
+.filter-bar .search-box:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+.filter-bar .filter-count { font-size: .8rem; color: #64748b; white-space: nowrap; }
+
+/* ── Reusable dropdown filter (same as snapshots) ── */
+.col-filter { position: relative; display: inline-block; }
+.col-filter-btn {
+    display: inline-flex; align-items: center; gap: .3rem;
+    padding: .35rem .6rem; font-size: .8rem; font-weight: 500;
+    background: #f8fafc; border: 1px solid #d1d5db; border-radius: .375rem;
+    cursor: pointer; color: #475569; white-space: nowrap; user-select: none;
+}
+.col-filter-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+.col-filter-btn.active { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+.col-filter-btn .arrow { font-size: .6rem; }
+.col-filter-panel {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 100;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: .375rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,.12); min-width: 200px; max-height: 300px;
+    overflow: hidden; flex-direction: column;
+}
+.col-filter-panel.open { display: flex; }
+.col-filter-search {
+    padding: .4rem .6rem; border: none; border-bottom: 1px solid #e2e8f0;
+    font-size: .8rem; outline: none; background: #f8fafc;
+}
+.col-filter-search:focus { background: #fff; }
+.col-filter-actions {
+    display: flex; gap: .5rem; padding: .35rem .6rem; border-bottom: 1px solid #f1f5f9;
+    font-size: .7rem;
+}
+.col-filter-actions a { cursor: pointer; color: #3b82f6; }
+.col-filter-actions a:hover { text-decoration: underline; }
+.col-filter-list { overflow-y: auto; max-height: 220px; padding: .25rem 0; }
+.col-filter-list label {
+    display: flex; align-items: center; gap: .4rem;
+    padding: .25rem .6rem; font-size: .8rem; cursor: pointer; color: #334155;
+}
+.col-filter-list label:hover { background: #f8fafc; }
+.col-filter-list input[type="checkbox"] { width: auto; margin: 0; }
+</style>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+    <input type="text" class="search-box" id="booking-search" placeholder="Search hotels, cities, platforms..." oninput="applyBookingFilters()">
+    <div class="col-filter" data-field="city">
+        <span class="col-filter-btn" onclick="toggleBkFilter(this)">City <span class="arrow">&#9662;</span></span>
+        <div class="col-filter-panel"></div>
+    </div>
+    <div class="col-filter" data-field="platform">
+        <span class="col-filter-btn" onclick="toggleBkFilter(this)">Platform <span class="arrow">&#9662;</span></span>
+        <div class="col-filter-panel"></div>
+    </div>
+    <div class="col-filter" data-field="currency">
+        <span class="col-filter-btn" onclick="toggleBkFilter(this)">Currency <span class="arrow">&#9662;</span></span>
+        <div class="col-filter-panel"></div>
+    </div>
+    <span class="filter-count" id="booking-count"></span>
+</div>
+
+<div id="bookings-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:1.25rem;">
 {% for item in bookings %}
 {% set b = item.booking %}
 {% set h = item.hotel %}
-<div class="card" style="padding:0; overflow:hidden;">
+<div class="card booking-card" style="padding:0; overflow:hidden;"
+     data-hotel="{{ h.name if h else '' }}"
+     data-city="{{ h.city if h else '' }}"
+     data-country="{{ h.country if h else '' }}"
+     data-platform="{{ b.platform }}"
+     data-currency="{{ b.currency }}"
+     data-search="{{ (h.name if h else '') }} {{ (h.city if h else '') }} {{ (h.country if h else '') }} {{ b.platform }} {{ b.currency }} {{ b.room_type or '' }} {{ b.booking_reference or '' }}">
     <!-- Header band -->
     <div style="background:#1e293b; color:#fff; padding:.875rem 1.25rem; display:flex; align-items:center; justify-content:space-between;">
         <div>
@@ -116,5 +193,115 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 {% endfor %}
 </div>
+
+<script>
+(function() {
+    var allCards = Array.from(document.querySelectorAll('.booking-card'));
+    var activeFilters = {};
+
+    // ── Build dropdown filter panels ──
+    function uniqueValues(field) {
+        var vals = {};
+        allCards.forEach(function(card) {
+            var v = (card.getAttribute('data-' + field) || '').trim();
+            if (v) vals[v] = true;
+        });
+        return Object.keys(vals).sort();
+    }
+
+    document.querySelectorAll('.filter-bar .col-filter').forEach(function(wrapper) {
+        var field = wrapper.getAttribute('data-field');
+        var panel = wrapper.querySelector('.col-filter-panel');
+        var values = uniqueValues(field);
+        if (values.length <= 1) { wrapper.style.display = 'none'; return; }
+
+        var html = '<input type="text" class="col-filter-search" placeholder="Search..." oninput="bkFilterSearch(this)">';
+        html += '<div class="col-filter-actions"><a onclick="bkCheckAll(this,true)">Select all</a><a onclick="bkCheckAll(this,false)">Clear</a></div>';
+        html += '<div class="col-filter-list">';
+        values.forEach(function(v) {
+            html += '<label><input type="checkbox" checked data-value="' + v.replace(/"/g, '&quot;') + '" data-field="' + field + '" onchange="onBkFilterChange(\'' + field + '\')"> ' + v + '</label>';
+        });
+        html += '</div>';
+        panel.innerHTML = html;
+    });
+
+    // ── Toggle / close ──
+    window.toggleBkFilter = function(btn) {
+        var panel = btn.nextElementSibling;
+        var isOpen = panel.classList.contains('open');
+        document.querySelectorAll('.filter-bar .col-filter-panel.open').forEach(function(p) { p.classList.remove('open'); });
+        if (!isOpen) { panel.classList.add('open'); var s = panel.querySelector('.col-filter-search'); if (s) s.focus(); }
+    };
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.col-filter')) {
+            document.querySelectorAll('.filter-bar .col-filter-panel.open').forEach(function(p) { p.classList.remove('open'); });
+        }
+    });
+
+    // ── Search within dropdown ──
+    window.bkFilterSearch = function(input) {
+        var q = input.value.toLowerCase();
+        input.parentElement.querySelectorAll('.col-filter-list label').forEach(function(lbl) {
+            lbl.style.display = lbl.textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+    };
+
+    // ── Select all / clear ──
+    window.bkCheckAll = function(link, checked) {
+        var panel = link.closest('.col-filter-panel');
+        var field = panel.parentElement.getAttribute('data-field');
+        panel.querySelectorAll('.col-filter-list input[type="checkbox"]').forEach(function(cb) {
+            if (cb.closest('label').style.display !== 'none') cb.checked = checked;
+        });
+        onBkFilterChange(field);
+    };
+
+    // ── On checkbox change ──
+    window.onBkFilterChange = function(field) {
+        var wrapper = document.querySelector('.filter-bar .col-filter[data-field="' + field + '"]');
+        var panel = wrapper.querySelector('.col-filter-panel');
+        var btn = wrapper.querySelector('.col-filter-btn');
+        var checkboxes = panel.querySelectorAll('.col-filter-list input[type="checkbox"]');
+        var checked = [], total = 0;
+        checkboxes.forEach(function(cb) { total++; if (cb.checked) checked.push(cb.getAttribute('data-value')); });
+
+        if (checked.length === total || checked.length === 0) {
+            delete activeFilters[field];
+            btn.innerHTML = field.charAt(0).toUpperCase() + field.slice(1) + ' <span class="arrow">&#9662;</span>';
+            btn.classList.remove('active');
+        } else {
+            activeFilters[field] = new Set(checked);
+            var label = checked.length === 1 ? checked[0] : checked.length + '/' + total;
+            if (label.length > 15) label = label.substring(0, 13) + '..';
+            btn.innerHTML = label + ' <span class="arrow">&#9662;</span>';
+            btn.classList.add('active');
+        }
+        applyBookingFilters();
+    };
+
+    // ── Apply all filters ──
+    window.applyBookingFilters = function() {
+        var query = (document.getElementById('booking-search').value || '').toLowerCase();
+        var visible = 0;
+        allCards.forEach(function(card) {
+            var show = true;
+            // Text search
+            if (query && !(card.getAttribute('data-search') || '').toLowerCase().includes(query)) show = false;
+            // Dropdown filters
+            if (show) {
+                for (var field in activeFilters) {
+                    var val = (card.getAttribute('data-' + field) || '').trim();
+                    if (!activeFilters[field].has(val)) { show = false; break; }
+                }
+            }
+            card.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        document.getElementById('booking-count').textContent = visible + ' of ' + allCards.length;
+    };
+
+    applyBookingFilters();
+})();
+</script>
 {% endif %}
 {% endblock %}
