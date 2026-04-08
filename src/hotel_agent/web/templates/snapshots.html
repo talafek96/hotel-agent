@@ -30,9 +30,90 @@
 <div class="alert-box alert-info">No snapshots yet. Run a <a href="/scrape">scrape</a> to fetch prices.</div>
 {% endif %}
 {% else %}
+
+<style>
+/* ── Column filter dropdowns ── */
+.col-filter { position: relative; display: inline-block; }
+.col-filter-btn {
+    display: inline-flex; align-items: center; gap: .3rem;
+    padding: .25rem .5rem; font-size: .75rem; font-weight: 500;
+    background: #f8fafc; border: 1px solid #d1d5db; border-radius: .25rem;
+    cursor: pointer; color: #475569; white-space: nowrap; user-select: none;
+}
+.col-filter-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+.col-filter-btn.active { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+.col-filter-btn .arrow { font-size: .6rem; }
+.col-filter-panel {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 100;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: .375rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,.12); min-width: 200px; max-height: 300px;
+    overflow: hidden; flex-direction: column;
+}
+.col-filter-panel.open { display: flex; }
+.col-filter-search {
+    padding: .4rem .6rem; border: none; border-bottom: 1px solid #e2e8f0;
+    font-size: .8rem; outline: none; background: #f8fafc;
+}
+.col-filter-search:focus { background: #fff; }
+.col-filter-actions {
+    display: flex; gap: .5rem; padding: .35rem .6rem; border-bottom: 1px solid #f1f5f9;
+    font-size: .7rem;
+}
+.col-filter-actions a { cursor: pointer; color: #3b82f6; }
+.col-filter-actions a:hover { text-decoration: underline; }
+.col-filter-list {
+    overflow-y: auto; max-height: 220px; padding: .25rem 0;
+}
+.col-filter-list label {
+    display: flex; align-items: center; gap: .4rem;
+    padding: .25rem .6rem; font-size: .8rem; cursor: pointer; color: #334155;
+}
+.col-filter-list label:hover { background: #f8fafc; }
+.col-filter-list input[type="checkbox"] { width: auto; margin: 0; }
+
+/* ── Sortable headers ── */
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable::after { content: " \2195"; color: #94a3b8; font-size: .7rem; }
+th.sortable.sort-asc::after { content: " \2191"; color: #3b82f6; }
+th.sortable.sort-desc::after { content: " \2193"; color: #3b82f6; }
+
+/* ── Row count ── */
+.table-info { font-size: .8rem; color: #64748b; margin-bottom: .5rem; }
+</style>
+
+<div class="table-info" id="row-count"></div>
+<div style="overflow-x:auto;">
 <table id="snapshots-table">
     <thead>
-        <tr><th>ID</th><th>Hotel</th><th>Platform</th><th>Room Type</th><th>Price</th><th>Currency</th><th>Dates</th><th>Scraped At</th><th data-sortable="false"></th></tr>
+        <tr>
+            <th class="sortable" data-col="0" data-type="num">ID</th>
+            <th data-col="1">
+                Hotel
+                <div class="col-filter" data-col="1">
+                    <span class="col-filter-btn" onclick="toggleFilter(this)">All <span class="arrow">&#9662;</span></span>
+                    <div class="col-filter-panel"></div>
+                </div>
+            </th>
+            <th data-col="2">
+                Platform
+                <div class="col-filter" data-col="2">
+                    <span class="col-filter-btn" onclick="toggleFilter(this)">All <span class="arrow">&#9662;</span></span>
+                    <div class="col-filter-panel"></div>
+                </div>
+            </th>
+            <th class="sortable" data-col="3">Room Type</th>
+            <th class="sortable" data-col="4" data-type="num">Price</th>
+            <th data-col="5">
+                Currency
+                <div class="col-filter" data-col="5">
+                    <span class="col-filter-btn" onclick="toggleFilter(this)">All <span class="arrow">&#9662;</span></span>
+                    <div class="col-filter-panel"></div>
+                </div>
+            </th>
+            <th class="sortable" data-col="6">Dates</th>
+            <th class="sortable" data-col="7">Scraped At</th>
+            <th></th>
+        </tr>
     </thead>
     <tbody>
         {% for item in snapshots %}
@@ -40,16 +121,16 @@
         <tr>
             <td>{{ s.id }}</td>
             <td>{{ item.hotel.name if item.hotel else "#" ~ s.hotel_id }}</td>
-            <td>{{ platform_badge(s.source_display or s.platform, s.link, s.platform) }}</td>
+            <td data-filter-value="{{ s.source_display or s.platform }}">{{ platform_badge(s.source_display or s.platform, s.link, s.platform) }}</td>
             <td>{{ s.room_type if s.room_type else "" }}</td>
             <td data-sort="{{ s.price }}">{{ "{:,.0f}".format(s.price) }}</td>
             <td>{{ s.currency }}</td>
-            <td>
+            <td data-sort="{{ s.check_in.isoformat() if s.check_in else '' }}">
                 {% if s.check_in and s.check_out %}
                 {{ s.check_in.strftime('%m/%d') }}-{{ s.check_out.strftime('%m/%d') }}
                 {% endif %}
             </td>
-            <td>{{ s.scraped_at.strftime('%Y-%m-%d %H:%M') if s.scraped_at else "" }}</td>
+            <td data-sort="{{ s.scraped_at.isoformat() if s.scraped_at else '' }}">{{ s.scraped_at.strftime('%Y-%m-%d %H:%M') if s.scraped_at else "" }}</td>
             <td>
                 <a href="/snapshots/{{ s.id }}" class="btn" style="padding:0.25rem 0.5rem; font-size:0.8rem;">Details</a>
                 <form method="post" action="/snapshots/{{ s.id }}/delete" style="display:inline;"
@@ -61,46 +142,177 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simple-datatables@10/dist/style.min.css">
-<style>
-    /* Blend Simple-DataTables with existing theme */
-    .datatable-wrapper .datatable-top,
-    .datatable-wrapper .datatable-bottom { padding: .75rem 0; font-size: .8125rem; }
-    .datatable-wrapper .datatable-search input {
-        padding: .4rem .75rem; font-size: .8125rem; border: 1px solid #d1d5db;
-        border-radius: .375rem; background: #fff; color: #1e293b;
-    }
-    .datatable-wrapper .datatable-search input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
-    .datatable-wrapper .datatable-selector { padding: .3rem .5rem; font-size: .8125rem; border: 1px solid #d1d5db; border-radius: .375rem; }
-    .datatable-wrapper .datatable-pagination .datatable-pagination-list-item-link {
-        padding: .25rem .625rem; border-radius: .25rem; font-size: .8125rem;
-    }
-    .datatable-wrapper .datatable-pagination .datatable-pagination-list-item.datatable-active .datatable-pagination-list-item-link {
-        background: #3b82f6; color: #fff;
-    }
-    .datatable-wrapper .datatable-sorter::before,
-    .datatable-wrapper .datatable-sorter::after { border-width: 3px; }
-    .datatable-wrapper .datatable-table th { cursor: pointer; }
-</style>
-<script src="https://cdn.jsdelivr.net/npm/simple-datatables@10/dist/umd/simple-datatables.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
     var table = document.getElementById('snapshots-table');
-    if (table) {
-        new simpleDatatables.DataTable(table, {
-            perPage: 25,
-            perPageSelect: [10, 25, 50, 100],
-            searchable: true,
-            sortable: true,
-            labels: {
-                placeholder: "Filter snapshots...",
-                noRows: "No snapshots match your filter",
-                info: "Showing {start} to {end} of {rows} snapshots",
+    var tbody = table.querySelector('tbody');
+    var allRows = Array.from(tbody.querySelectorAll('tr'));
+
+    // ── Column filters (multi-select dropdown checkboxes) ──
+
+    // Extract unique values for a column from all rows
+    function getColumnValues(colIdx) {
+        var vals = {};
+        allRows.forEach(function(row) {
+            var cell = row.children[colIdx];
+            var v = (cell.getAttribute('data-filter-value') || cell.textContent).trim();
+            if (v) vals[v] = true;
+        });
+        return Object.keys(vals).sort();
+    }
+
+    // Active filters: colIdx -> Set of allowed values (empty = all)
+    var activeFilters = {};
+
+    // Build the filter panel for each .col-filter
+    document.querySelectorAll('.col-filter').forEach(function(wrapper) {
+        var colIdx = parseInt(wrapper.getAttribute('data-col'));
+        var panel = wrapper.querySelector('.col-filter-panel');
+        var values = getColumnValues(colIdx);
+
+        var searchHtml = '<input type="text" class="col-filter-search" placeholder="Search..." oninput="filterCheckboxes(this)">';
+        var actionsHtml = '<div class="col-filter-actions"><a onclick="checkAll(this, true)">Select all</a><a onclick="checkAll(this, false)">Clear</a></div>';
+        var listHtml = '<div class="col-filter-list">';
+        values.forEach(function(v) {
+            listHtml += '<label><input type="checkbox" checked data-value="' + v.replace(/"/g, '&quot;') + '" onchange="onFilterChange(' + colIdx + ')"> ' + v + '</label>';
+        });
+        listHtml += '</div>';
+        panel.innerHTML = searchHtml + actionsHtml + listHtml;
+    });
+
+    // Toggle panel open/close
+    window.toggleFilter = function(btn) {
+        var panel = btn.nextElementSibling;
+        var isOpen = panel.classList.contains('open');
+        // Close all other panels first
+        document.querySelectorAll('.col-filter-panel.open').forEach(function(p) { p.classList.remove('open'); });
+        if (!isOpen) {
+            panel.classList.add('open');
+            var search = panel.querySelector('.col-filter-search');
+            if (search) search.focus();
+        }
+    };
+
+    // Close panels when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.col-filter')) {
+            document.querySelectorAll('.col-filter-panel.open').forEach(function(p) { p.classList.remove('open'); });
+        }
+    });
+
+    // Search within the checkbox list
+    window.filterCheckboxes = function(input) {
+        var query = input.value.toLowerCase();
+        var labels = input.parentElement.querySelectorAll('.col-filter-list label');
+        labels.forEach(function(lbl) {
+            var text = lbl.textContent.toLowerCase();
+            lbl.style.display = text.includes(query) ? '' : 'none';
+        });
+    };
+
+    // Select all / clear all
+    window.checkAll = function(link, checked) {
+        var panel = link.closest('.col-filter-panel');
+        var colIdx = parseInt(panel.parentElement.getAttribute('data-col'));
+        panel.querySelectorAll('.col-filter-list input[type="checkbox"]').forEach(function(cb) {
+            // Only affect visible checkboxes (respect search filter)
+            if (cb.closest('label').style.display !== 'none') cb.checked = checked;
+        });
+        onFilterChange(colIdx);
+    };
+
+    // When any checkbox changes, update the active filter and re-filter rows
+    window.onFilterChange = function(colIdx) {
+        var wrapper = document.querySelector('.col-filter[data-col="' + colIdx + '"]');
+        var panel = wrapper.querySelector('.col-filter-panel');
+        var btn = wrapper.querySelector('.col-filter-btn');
+        var checkboxes = panel.querySelectorAll('.col-filter-list input[type="checkbox"]');
+        var checked = [];
+        var total = 0;
+        checkboxes.forEach(function(cb) {
+            total++;
+            if (cb.checked) checked.push(cb.getAttribute('data-value'));
+        });
+
+        if (checked.length === total || checked.length === 0) {
+            delete activeFilters[colIdx];
+            btn.textContent = 'All ';
+            btn.innerHTML += '<span class="arrow">&#9662;</span>';
+            btn.classList.remove('active');
+        } else {
+            activeFilters[colIdx] = new Set(checked);
+            var label = checked.length === 1 ? checked[0] : checked.length + '/' + total;
+            if (label.length > 15) label = label.substring(0, 13) + '..';
+            btn.textContent = label + ' ';
+            btn.innerHTML += '<span class="arrow">&#9662;</span>';
+            btn.classList.add('active');
+        }
+
+        applyFilters();
+    };
+
+    function applyFilters() {
+        var visible = 0;
+        allRows.forEach(function(row) {
+            var show = true;
+            for (var colIdx in activeFilters) {
+                var cell = row.children[colIdx];
+                var val = (cell.getAttribute('data-filter-value') || cell.textContent).trim();
+                if (!activeFilters[colIdx].has(val)) { show = false; break; }
+            }
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        document.getElementById('row-count').textContent =
+            'Showing ' + visible + ' of ' + allRows.length + ' snapshots';
+    }
+
+    // ── Column sorting ──
+    var currentSort = { col: -1, dir: 0 }; // dir: 0=none, 1=asc, -1=desc
+
+    document.querySelectorAll('th.sortable').forEach(function(th) {
+        th.addEventListener('click', function() {
+            var col = parseInt(th.getAttribute('data-col'));
+            var isNum = th.getAttribute('data-type') === 'num';
+
+            // Cycle: none -> asc -> desc -> none
+            if (currentSort.col === col) {
+                currentSort.dir = currentSort.dir === 1 ? -1 : (currentSort.dir === -1 ? 0 : 1);
+            } else {
+                currentSort = { col: col, dir: 1 };
+            }
+
+            // Update header classes
+            document.querySelectorAll('th.sortable').forEach(function(h) {
+                h.classList.remove('sort-asc', 'sort-desc');
+            });
+            if (currentSort.dir === 1) th.classList.add('sort-asc');
+            else if (currentSort.dir === -1) th.classList.add('sort-desc');
+
+            // Sort rows
+            if (currentSort.dir === 0) {
+                // Restore original order
+                allRows.forEach(function(r) { tbody.appendChild(r); });
+            } else {
+                var sorted = allRows.slice().sort(function(a, b) {
+                    var ca = a.children[col];
+                    var cb = b.children[col];
+                    var va = ca.getAttribute('data-sort') || ca.textContent.trim();
+                    var vb = cb.getAttribute('data-sort') || cb.textContent.trim();
+                    if (isNum) { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; }
+                    var cmp = isNum ? va - vb : va.localeCompare(vb);
+                    return cmp * currentSort.dir;
+                });
+                sorted.forEach(function(r) { tbody.appendChild(r); });
             }
         });
-    }
-});
+    });
+
+    // Initial count
+    applyFilters();
+})();
 </script>
 {% endif %}
 {% endblock %}
