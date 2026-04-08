@@ -30,19 +30,20 @@
 <div class="alert-box alert-info">No snapshots yet. Run a <a href="/scrape">scrape</a> to fetch prices.</div>
 {% endif %}
 {% else %}
-<table>
+<table id="snapshots-table">
     <thead>
-        <tr><th>ID</th><th>Hotel</th><th>Platform</th><th>Room Type</th><th>Price</th><th>Dates</th><th>Scraped At</th><th></th></tr>
+        <tr><th>ID</th><th>Hotel</th><th>Platform</th><th>Room Type</th><th>Price</th><th>Currency</th><th>Dates</th><th>Scraped At</th><th data-sortable="false"></th></tr>
     </thead>
     <tbody>
         {% for item in snapshots %}
         {% set s = item.snapshot %}
         <tr>
             <td>{{ s.id }}</td>
-            <td>{{ item.hotel.name[:25] if item.hotel else "#" ~ s.hotel_id }}</td>
+            <td>{{ item.hotel.name if item.hotel else "#" ~ s.hotel_id }}</td>
             <td>{{ platform_badge(s.source_display or s.platform, s.link, s.platform) }}</td>
-            <td>{{ s.room_type[:30] if s.room_type else "" }}</td>
-            <td><strong>{{ "{:,.0f}".format(s.price) }} {{ s.currency }}</strong></td>
+            <td>{{ s.room_type if s.room_type else "" }}</td>
+            <td data-sort="{{ s.price }}">{{ "{:,.0f}".format(s.price) }}</td>
+            <td>{{ s.currency }}</td>
             <td>
                 {% if s.check_in and s.check_out %}
                 {{ s.check_in.strftime('%m/%d') }}-{{ s.check_out.strftime('%m/%d') }}
@@ -60,5 +61,46 @@
         {% endfor %}
     </tbody>
 </table>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simple-datatables@10/dist/style.min.css">
+<style>
+    /* Blend Simple-DataTables with existing theme */
+    .datatable-wrapper .datatable-top,
+    .datatable-wrapper .datatable-bottom { padding: .75rem 0; font-size: .8125rem; }
+    .datatable-wrapper .datatable-search input {
+        padding: .4rem .75rem; font-size: .8125rem; border: 1px solid #d1d5db;
+        border-radius: .375rem; background: #fff; color: #1e293b;
+    }
+    .datatable-wrapper .datatable-search input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+    .datatable-wrapper .datatable-selector { padding: .3rem .5rem; font-size: .8125rem; border: 1px solid #d1d5db; border-radius: .375rem; }
+    .datatable-wrapper .datatable-pagination .datatable-pagination-list-item-link {
+        padding: .25rem .625rem; border-radius: .25rem; font-size: .8125rem;
+    }
+    .datatable-wrapper .datatable-pagination .datatable-pagination-list-item.datatable-active .datatable-pagination-list-item-link {
+        background: #3b82f6; color: #fff;
+    }
+    .datatable-wrapper .datatable-sorter::before,
+    .datatable-wrapper .datatable-sorter::after { border-width: 3px; }
+    .datatable-wrapper .datatable-table th { cursor: pointer; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/simple-datatables@10/dist/umd/simple-datatables.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var table = document.getElementById('snapshots-table');
+    if (table) {
+        new simpleDatatables.DataTable(table, {
+            perPage: 25,
+            perPageSelect: [10, 25, 50, 100],
+            searchable: true,
+            sortable: true,
+            labels: {
+                placeholder: "Filter snapshots...",
+                noRows: "No snapshots match your filter",
+                info: "Showing {start} to {end} of {rows} snapshots",
+            }
+        });
+    }
+});
+</script>
 {% endif %}
 {% endblock %}
